@@ -1,2 +1,0 @@
-# Javascriptmastered
-Learning Javasacript
