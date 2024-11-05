@@ -1,6 +1,7 @@
-<Select
+ <InputLabel id="nodetype-label">Tech Type</InputLabel>
+                      <Select
                         labelid="nodetype-label"
-                        id="teah_type"
+                        id="tech_type"
                         value={filters.nodetype}
                         label="Tech Type"
                         onChange={(e) => {
