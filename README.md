@@ -1,5 +1,7 @@
-<TableCell style={kpi?.succ ? getCellStyle(kpi) : styles.tableCell}>
-    {kpi?.succ && !isNaN(parseFloat(kpi.succ))
-        ? Number(parseFloat(kpi.succ)).toFixed(2) // Convert to a number and round to 2 decimals
-        : 'null'} // If the value cannot be converted to a number, show 'null'
+const cleanSucc = kpi.succ.trim(); // Remove any whitespace around the value
+
+<TableCell style={cleanSucc && !isNaN(parseFloat(cleanSucc)) ? getCellStyle(kpi) : styles.tableCell}>
+    {cleanSucc && !isNaN(parseFloat(cleanSucc))
+        ? Number(parseFloat(cleanSucc)).toFixed(2) // Convert to a number and round to 2 decimals
+        : 'null'}
 </TableCell>
