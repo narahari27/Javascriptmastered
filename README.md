@@ -35,7 +35,7 @@ const processStats = () => {
       acc[hostName][metricType][stat.kpi] = {
         ...stat,
         name: KPI_NAME[stat.kpi] || stat.kpi, // Friendly name
-        priority: determinePriority(stat), // Calculate priority
+        priority: determinePriority(stat), // Use the helper function
       };
     }
 
