@@ -1,6 +1,4 @@
 function compareObjects(obj1, obj2) {
-    console.log('objects:',obj1);
-    console.log('objects2:',obj2);
     let result = [];
     Object.keys(obj2).forEach(key => {
     
@@ -56,23 +54,19 @@ const processAlerts = (data) => {
 
     alerts.forEach((alert) => {
         let node = nodes.find((node) => node.host_name == alert.host_name);
-        if(node && node?.stats) {
-            let kpi = Object.values(node?.stats).find((kpi) => kpi?.priority == alert?.priority);
-            // console.log(kpi, "kpi");
+        if(node && node?.stats){
+            let kpi = Object.values(node.stats).find((kpi) => kpi?.priority == alert?.priority);
             if(kpi){
-                // console.log(kpi, "kpi exists")
-                if(['critical', 'major', 'minor'].includes(alert.priority)){
+                if(['critical', 'major'].includes(alert.priority)){
                     alert['kpi'] = kpi?.kpi
-                }
-
-                if((kpi?.display_type === 'kpi' || kpi?.displaytype === 'kpi')) {
-                    alert['value'] = kpi?.succ
-                }else {
-                    alert['value'] = kpi?.att
+                    alert['value'] = kpi.succ || 'N/A';
+                    alert['green'] = kpi?.green || 'N/A';
+                    alert['orange'] = kpi?.orange || 'N/A';
+                    alert['red'] = kpi?.red || 'N/A';
                 }
             }
         }
-       
+        
     });
     
     return {alerts, newData, previousData};
