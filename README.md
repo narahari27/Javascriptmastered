@@ -53,20 +53,11 @@ const processAlerts = (data) => {
     }
 
     alerts.forEach((alert) => {
-        let node = nodes.find((node) => node.host_name == alert.host_name);
-        if(node && node?.stats){
+        if(['critical', 'major'].includes(alert.priority)){
+            let node = nodes.find((node) => node.host_name == alert.host_name);
             let kpi = Object.values(node.stats).find((kpi) => kpi?.priority == alert?.priority);
-            if(kpi){
-                if(['critical', 'major'].includes(alert.priority)){
-                    alert['kpi'] = kpi?.kpi
-                    alert['value'] = kpi.succ || 'N/A';
-                    alert['green'] = kpi?.green || 'N/A';
-                    alert['orange'] = kpi?.orange || 'N/A';
-                    alert['red'] = kpi?.red || 'N/A';
-                }
-            }
+            alert['kpi'] = kpi?.kpi
         }
-        
     });
     
     return {alerts, newData, previousData};
