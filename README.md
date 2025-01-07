@@ -1,4 +1,25 @@
-useEffect(() => {
+const processVEPDGNodes = (nodes)=>{
+    return nodes.map((node)=>{
+      if(node.nodetype === 'vepdg'){
+        const kpiStats = node.stats?.OOR;
+        if(kpiStats){
+          if(kpiStats.att === 'InService'){
+            node.priority = 'normal';
+          }else if (kpiStats.att === 'OOR'){
+            node.priority = 'oor';
+          }else if (kpiStats.att === 'Error'){
+            node.priority = 'major';
+          }else {
+            node.priority = 'normal';
+          }
+        }else{
+          node.priority = 'normal';
+        }
+      }
+      return node;
+    });
+  };
+  useEffect(() => {
     if (data.length) {
       let temp = [...data];
       temp = processVEPDGNodes(temp);
