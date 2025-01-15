@@ -1,54 +1,33 @@
-const processVEPDGNodes = (nodes)=>{
-    return nodes.map((node)=>{
-      if(node.nodetype === 'vepdg'){
-        const kpiStats = node.stats?.OOR;
-        if(kpiStats){
-          if(kpiStats.att === 'InService'){
-            node.priority = 'normal';
-          }else if (kpiStats.att === 'OOR'){
-            node.priority = 'oor';
-          }else if (kpiStats.att === 'Error'){
-            node.priority = 'major';
-          }else {
-            node.priority = 'normal';
-          }
-        }else{
-          node.priority = 'normal';
-        }
-      }
-      return node;
-    });
-  };
-  useEffect(() => {
-    if (data.length) {
-      let temp = [...data];
-      temp = processVEPDGNodes(temp);
-      if (oor) {
-        // let temp = data.filter(_ => (_.nestStatus?.toLowerCase() === 'inservice' || _.nestStatus?.toLowerCase() === 'not_found') && !(_.isCombiNode == 1 && _.stats?.RC_Value?.att !== 50 && _.stats?.RC?.att !== 50));
-        temp = temp.filter((_) => {
-          if(_.nodetype === 'vepdg'){
-            return true;
-          }
-          return(
-            (_.nestStatus?.toLowerCase() === 'inservice' || _.nestStatus?.toLowerCase() === 'not_found') && !(_.isCombiNode == 1
-             && _.stats?.RC_Value?.att !== 50 && _.stats?.RC?.att !== 50
-            ));
-          });
-          temp = temp.filter(_ => {
-            if (_.nodetype === 'nrf') {
-              return _.ntwCheck === 'ON';
-            } else {
-              return true
-            }
-          });
-        setNodes(groupByPool(temp));
-        setBasefilters(getFilters(temp));
-        setFilteredNodes(groupByRegions(temp));
-      } else {
-        // console.log(data[0])
-        setNodes(groupByPool(data));
-        setBasefilters(getFilters(data));
-        setFilteredNodes(groupByRegions(data));
-      }
-    }
-  }, [data,oor]);
+import './App.css';
+import { NodeProvider } from './NodeContext';
+import { ThemeProvider, createTheme, CssBaseline, Box, Grid } from '@mui/material';
+import { AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
+import RetryButton from './components/auth/Retry';
+import LoginButton from './components/auth/Login';
+import { AllowedContent, NotAllowedContent, RoleLayout } from './components/auth/RoleLayout';import Dashboard from './components/Dashboard';
+import Header from './components/Header';const theme = createTheme({
+  palette: {
+    primary: {
+      light: '#757CE8',
+      main: '#D6006E',
+      dark: '#800042',
+      contrastText: '#fff',
+    },
+    secondary: {
+      light: '#FF7961',
+      main: '#D6006E',
+      dark: '#BA000D',
+      contrastText: '#000',
+    },
+  },
+});function App() {
+  return (
+<ThemeProvider theme={theme}>
+<CssBaseline />
+<NodeProvider>
+<Header />
+<Dashboard />
+</NodeProvider>
+</ThemeProvider>
+  );
+}export default App;
