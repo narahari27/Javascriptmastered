@@ -1,33 +1,24 @@
-import './App.css';
-import { NodeProvider } from './NodeContext';
-import { ThemeProvider, createTheme, CssBaseline, Box, Grid } from '@mui/material';
-import { AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
-import RetryButton from './components/auth/Retry';
-import LoginButton from './components/auth/Login';
-import { AllowedContent, NotAllowedContent, RoleLayout } from './components/auth/RoleLayout';import Dashboard from './components/Dashboard';
-import Header from './components/Header';const theme = createTheme({
-  palette: {
-    primary: {
-      light: '#757CE8',
-      main: '#D6006E',
-      dark: '#800042',
-      contrastText: '#fff',
-    },
-    secondary: {
-      light: '#FF7961',
-      main: '#D6006E',
-      dark: '#BA000D',
-      contrastText: '#000',
-    },
-  },
-});function App() {
-  return (
-<ThemeProvider theme={theme}>
-<CssBaseline />
-<NodeProvider>
-<Header />
-<Dashboard />
-</NodeProvider>
-</ThemeProvider>
-  );
-}export default App;
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import { MsalProvider } from "@azure/msal-react";
+import { PublicClientApplication } from "@azure/msal-browser";
+import { msalConfig } from "./AuthConfig";
+import App from './App';
+import reportWebVitals from './reportWebVitals';
+import { DBConfig } from "./DBConfig";
+import { initDB } from "react-indexed-db-hook";initDB(DBConfig);export const msalInstance = new PublicClientApplication(msalConfig);const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+<React.StrictMode>
+<App />
+</React.StrictMode>
+);// If you want to start measuring performance in your app, pass a function
+// to log results (for example: reportWebVitals(console.log))
+// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+reportWebVitals();
+
+create-react-app.dev
+
+Measuring Performance | Create React App
+
+By default, Create React App includes a performance relayer that allows you to measure and analyze (9 kB)
