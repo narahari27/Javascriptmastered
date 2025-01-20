@@ -1,644 +1,520 @@
-import React, { createContext, useState, useEffect } from 'react';
-import { useIndexedDB } from "react-indexed-db-hook";
-import REGIONS_MAPPING from './constants/REGION_MAPPING.json';
-import axiosClient from './api/client';
-import {store} from './store';
-import {setNotesData} from './reducers/nodeSlice';
+import React, { useState, useContext, useEffect, Fragment } from 'react';
+import { Card, CardContent, Typography, Menu, MenuItem, Popover, Modal, Box, Input, Button, IconButton, TextField, FormControl, InputLabel, Select, Grid } from '@mui/material';
+import { NodeContext } from "../NodeContext";
+import HistoryIcon from '@mui/icons-material/History';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
+import NoteAddIcon from '@mui/icons-material/NoteAdd';
+import NotesIcon from '@mui/icons-material/Notes';
+import CloseIcon from '@mui/icons-material/Close';
+import KPIModalContent from './KPIModalContent';
+import CombiKPIModalContent from './CombiKPIModalContent';
+import axiosClient from '../api/client';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
+import DeleteIcon from '@mui/icons-material/Delete';
+import CommentIcon from '@mui/icons-material/Comment';
+import AutoDeleteIcon from '@mui/icons-material/AutoDelete';
+import moment from 'moment-timezone';
 
-export const NodeContext = createContext(null);
+const timeZone = 'UTC';
 
-const groupByRegions = (data) => {
-  return data.reduce((acc, curr) => {
-    const largerRegion = REGIONS_MAPPING[curr.pool];
+const modal = {
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  minWidth: 400,
+  bgcolor: 'background.paper',
+  border: '2px solid #000',
+  boxShadow: 24,
+  padding: 4,
+  width: '85%',
+  maxHeight: '85vh', 
+  overflowY: 'auto',
+};
 
-    if (!acc[largerRegion]) {
-      acc[largerRegion] = {};
-    }
+const modalNotes = {
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  minWidth: 400,
+  bgcolor: 'background.paper',
+  border: '2px solid #000',
+  boxShadow: 24,
+  p: 4
+};
 
-    if(curr.pool.includes('IOTP')){
-      if (!acc[largerRegion]['IOTP']) {
-        acc[largerRegion]['IOTP'] = [];
-      }
-  
-      acc[largerRegion]['IOTP'].push(curr);
-    }else{
-      if (!acc[largerRegion][curr.pool]) {
-        acc[largerRegion][curr.pool] = [];
-      }
-  
-      acc[largerRegion][curr.pool].push(curr);
-    }
-    
-
-    return acc;
-  }, {});
-}
-
-
-const groupByPool = (data) => {
-  return data.reduce((acc, curr) => {
-    if(curr.pool.includes('IOTP')){
-      if(!acc['IOTP']){
-        acc['IOTP'] = [];
-        acc['IOTP'].push(curr);
-      }else{
-        acc['IOTP'].push(curr);
-      }
-    }else{
-      if (!acc[curr.pool]) {
-        acc[curr.pool] = [];
-        acc[curr.pool].push(curr);
-      } else {
-        acc[curr.pool].push(curr);
-      }
-    }
-    return acc
-  }, {})
-}
-
-const getFilters = (data) => {
-  return data.reduce((acc, curr) => {
-    if (acc.pools.indexOf(curr.pool) === -1) {
-      acc.pools.push(curr.pool)
-    }
-
-    if (acc.nodetype.indexOf(curr.nodetype) === -1) {
-      acc.nodetype.push(curr.nodetype)
-    }
-
-    if (acc.regions.indexOf(curr.timezone) === -1) {
-      acc.regions.push(curr.timezone)
-    }
-
-    return acc
-  }, {
-    nodetype: ['All'],
-    regions: ['All'],
-    pools: ['All'],
-  })
-}
-
-export const NodeProvider = ({ children }) => {
-  const { add, getAll } = useIndexedDB("alerts");
-  const tech = ['mme','amf','smsf','vepdg'];
-  const techGrp = ['nrf'];
-  const  [statsV2, setStatsV2] = useState({
-    mme: [],
-    amf: [],
-    smsf: [],
-    vepdg: [],
-    nrf: []
+const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }) => {
+  const currentDate = moment().tz(timeZone);
+  const [state, setState] = React.useState({
+    openSnackState: false,
+    vertical: 'top',
+    horizontal: 'center',
   });
-  const  [avgV2, setAvgV2] = useState({
-    mme: [],
-    amf: [],
-    smsf: [],
-    vepdg: [],
-    nrf: []
+  const { vertical, horizontal, openSnackState } = state;
+  const [snackMessage, setSnackMessage] = useState('');
+  const { syncNotes } = useContext(NodeContext);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [anchorEl, setAnchorEl] = React.useState(null);
+  const [openNotes, setOpenNotes] = useState(false);
+  const [openViewNotes, setViewOpenNotes] = useState(false);
+  const [openChart, setOpenChart] = useState(false);
+  const [mouseIsOver, setMouseIsOver] = useState(true);
+  const [note, setNote] = useState('');
+  const [curr, setCurr] = useState('');
+  const [confirmModal, setConfirmModal] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [endDate, setEndDate] = useState(() => {
+    const ptNow = moment.tz(timeZone).format('YYYY-MM-DDTHH:mm');
+    return ptNow;
   });
-  const [data, setData] = useState([]);
-  const [stats, setStats] = useState([]);
-  const [stats15, setStats15] = useState([]);
-  const [processedStats, setProcessedStats] = useState({});
-  const [nodeData, setNodeData] = useState([]);
-  const [notes, setNotes] = useState([]);
-  const [dataLoading, setDataLoading] = useState(false);
-  const [nest, setNest] = useState([]);
-  const [nestInfo, setNestInfo] = useState({});
-  const [avg, setAvg] = useState([]);
-  const [oor, toggleOOR] = useState(localStorage.getItem('oor') ? localStorage.getItem('oor') === 'true' ? true : false : true);
-  const [allAlerts, setAllAlerts] = useState([]);
-  const [alerts, setAlerts] = useState([]);
-  const [notifications, setNotifications] = useState(false);
-  const [fetchAlerts, setFetchAlerts] = useState(false);
-  const [error, setError] = useState(false);
-  const [priorityFilter, setPriorityFilter] = useState(['normal', 'major', 'minor', 'critical']);
-  const [notificationsFilter, setNotificationsFilter] = useState({priorities: ['critical'], timeRange: '1hr'});
-  const [nodeStatsProcessedCount, setNodeStatsProcessedCount] = useState({});
-  const [locationMapping ,setLocationMapping] = useState({});
-  const [upfView, toggleUPFView] = useState(localStorage.getItem('upf_view') ? localStorage.getItem('upf_view') === 'true' ? true : false : true);
-
-  const fetchAllNodes = async () => {
-    setDataLoading(true);
-    try {
-      let data = await axiosClient.get(`/api/getAllConfig`);
-      setError(false);
-      setDataLoading(false);
-      const config = data?.data?.config || {};
-      const nodes = Object.values(config);
-      setNodeData(nodes);
-    } catch(err) {
-      setError(true);
-      setDataLoading(false);
-      setNodeData([]);
-    }
-  }
-
-  const fetchNest = async () => {
-    try {
-      const { data } = await axiosClient.get(`/api/getNestInfo/?_=${new Date().getTime()}`);
-      setError(false);
-      setNest(data?.data);
-      const nestData = data?.data?.reduce((acc, curr) => {
-        acc[curr.nodeName] = curr.nodeStatus;
-        return acc
-      }, {});
-      setNestInfo(nestData)
-    } catch(err) {
-      setError(true);
-      setNest([]);
-      setNestInfo({});
-    }
-  }
-
-  const fetchNotes = async () => {
-    const { data } = await axiosClient.get(`/api/getNotes?_=${new Date().getTime()}`);
-    setNotes(data?.data);
-    store.dispatch(setNotesData(data?.data))
-  }
-
-  const fetchStats = async () => {
-    const promiseArray = tech.map(t => axiosClient.get(`/api/getNodeStats/?nodeType=${t}`));
-
-    Promise.all(promiseArray).then(res  => {
-      const result = res.reduce((acc, curr, index) => {
-        acc = [...acc, ...curr?.data?.data]
-        return acc
-      }, []);
-      setError(false);
-      if(result && result.length){
-        setStats(result);
-      }
-    }).catch(err => {
-      setError(true);
-      setStats([]);
-    });
-  }
-
-  const fetchStatsV2 = async () => {
-    tech.forEach(t => {
-      axiosClient.get(`/api/getNodeStats/?nodeType=${t}`).then(res => {
-        const data = res?.data?.data || [];
-        setError(false);
-        setStatsV2((prev) => ({...prev, [t]: data}));
-      }).catch(err => {
-        setError(true);
-        setStatsV2((prev) => ({...prev, [t]: []}));
-      });
-    })
-  }
-
-  const fetchStats15 = async () => {
-    const promiseArray = techGrp.map(t => axiosClient.get(`/api/getNodeStats/${t}`));
-
-    Promise.all(promiseArray).then(res  => {
-      const result = res.reduce((acc, curr, index) => {
-        acc = [...acc, ...curr?.data?.data]
-        return acc
-      }, []);
-      setError(false);
-      if(result && result.length){
-        setStats15(result);
-      }
-    }).catch(err => {
-      console.log('Error in fetching NRF Data')
-      setStats15([]);
-    });
-  }
-
-  const fetchStats15V2 = async () => {
-    techGrp.forEach(t => {
-      axiosClient.get(`/api/getNodeStats/${t}`).then(res => {
-        const data = res?.data?.data || [];
-        setError(false);
-        setStatsV2((prev) => ({...prev, [t]: data}));
-      }).catch(err => {
-        setError(true);
-        setStatsV2((prev) => ({...prev, [t]: []}));
-      });
-    })
-  }
-
-  const fetchAverage = async () => {
-    const promiseArray = tech.map(t => axiosClient.get(`/api/getNodeTrends/?techType=${t}`));
-
-    Promise.all(promiseArray).then(res  => {
-      const result = res.reduce((acc, curr, index) => {
-        acc = [...acc, ...curr?.data?.data]
-        return acc
-      }, []);
-      setError(false);
-      setAvg(result);
-    }).catch(err => {
-      setError(true);
-      setAvg([]);
-    });
-  }
-
-  const fetchAverageV2 = async () => {
-    tech.forEach(t => {
-      axiosClient.get(`/api/getNodeTrends/?techType=${t}`).then(res => {
-        setError(false);
-        const data = res?.data?.data || [];
-        setAvgV2((prev) => ({...prev, [t]: data}));
-      }).catch(err => {
-        setError(true);
-        setAvgV2((prev) => ({...prev, [t]: []}));
-      });
-    })
-  }
-
-  const postAlerts = async (data) => {
-    
-    let alertsData = await data.map((_) => ({
-        'alert_time' : _.timestamp,
-        'node' : _.host_name,
-        'current_state' : _.priority,
-        'previous_state' : _.prevPriority,
-        'kpi_name' : _.kpi,
-        'pool' : _.pool || 'null',
-        'status' : _.isNew ? 'New' : 'Updated',
-        'value' : _.value,
-        'green':_.green || 'null',
-        'yellow': _.yellow || 'null',
-        'orange':_.orange || 'null',
-        'red':_.red || 'null'
-    }));
+  const [autoDelete, setAutoDelete] = useState(7);
   
-    try {
-      let response = await axiosClient.post(`/api/saveAlerts`, alertsData);
-    } catch(err) {
-      console.log("error in storing alerts", err);
-    }
-  }
-
-
-  useEffect(() => {
-    if ((stats && stats.length) || (stats15 && stats15.length)) {
-      processStats();
-    }
-  }, [stats, avg, stats15]);
-
-  useEffect(() => {
-    if (data && data.length && fetchAlerts) {
-      processAlerts();
-    }
-  }, [data]);
-
-  useEffect(() => {
-    for (const [key, value] of Object.entries(statsV2)) {
-      if (value && value.length) {
-        setStats((prev) => ([...prev, ...value]));
-      }
-    }
-  }, [statsV2]);
-
-  useEffect(() => {
-    for (const [key, value] of Object.entries(avgV2)) {
-      if (value && value.length) {
-        setAvg((prev) => ([...prev, ...value]));
-      }
-    }
-  }, [avgV2]);
-
-  useEffect(() => {
-    fetchAllNodes();
-    fetchNest();
-    fetchAverageV2();
-    fetchStatsV2();
-    fetchStats15V2();
-
-    getAll().then(res => {
-      if (res && res.length) {
-        setAllAlerts(res);
-      }
-    })
-
-    const interval = setInterval(() => {
-      fetchNest();
-      fetchAverageV2();
-      fetchStatsV2();
-    }, 300000);
-
-    setInterval(() => {
-      fetchAllNodes();
-    }, 900000)
-
-    // return () => clearInterval(interval);
-  }, [])
-  
-  useEffect(() => {
-    const nodeWorker = new Worker('/workers/processNodes.js');
-    if (nodeData && nodeData.length > 0) {
-      if (processedStats && Object.keys(processedStats).length) {
-        // localStorage.setItem("processedStats", JSON.stringify(processedStats));
-        nodeData?.reduce((acc, curr) => {
-          if(nodeStatsProcessedCount[curr.host_name]){
-            setNodeStatsProcessedCount(prevState => ({ ...prevState, [curr.host_name]: nodeStatsProcessedCount[curr.host_name] + 1 }));
-          }else{
-            setNodeStatsProcessedCount(prevState => ({ ...prevState, [curr.host_name]: 1 })); 
-            
-          }
-        });
-
-        nodeWorker.postMessage({
-          nodes: nodeData,
-          notes: notes,
-          stats: processedStats,
-          nest: nest,
-          nodeStatsProcessedCount: nodeStatsProcessedCount
-        });
-      }
-
-      nodeWorker.onmessage = function (e) {
-        setData(e.data);
-        nodeWorker.terminate();
-      };
-    }
-
-    return () => nodeWorker.terminate();
-  }, [nodeData, processedStats, notes, nest]);
-
-  const processStats = () => {
-    const statsWorker = new Worker('/workers/processStats.js');
-    statsWorker.postMessage({
-      stats: [
-        ...stats,
-        ...stats15
-      ],
-      avg
-    });
-
-    statsWorker.onmessage = function (e) {
-      setFetchAlerts(true);
-      setProcessedStats(e.data);
-      statsWorker.terminate();
-    };
-
-    statsWorker.onerror = function (event) {
-      setProcessedStats({});
-      statsWorker.terminate();
-    };
-  }
-
-  const processAlerts = () => {
-    const alertsWorker = new Worker('/workers/processAlerts.js');
-    let previousData = window.localStorage.getItem('alerts');
-    previousData = previousData ? JSON.parse(previousData) : {};
-    alertsWorker.postMessage({
-      nodes: data,
-      previousData: previousData
-    });
-
-    alertsWorker.onmessage = function (e) {
-      const { alerts, newData, previousData } = e.data;
-      window.localStorage.setItem('alerts', JSON.stringify({ ...previousData, ...newData }));
-      if (alerts) {
-        setAllAlerts([...allAlerts, ...alerts]);
-        setAlerts(alerts);
-        if(alerts.length){
-          postAlerts(alerts);
-        }
-        setFetchAlerts(false);
-        alerts?.forEach(_ => add(_));
-        alertsWorker.terminate();
-      }
-    };
-
-    alertsWorker.onerror = function (event) {
-      setFetchAlerts(false);
-      setAlerts([]);
-      alertsWorker.terminate();
-    };
-  }
-
-  const [nodes, setNodes] = useState(groupByPool(data));
-  const [basefilters, setBasefilters] = useState(getFilters(data));
-  const [filteredNodes, setFilteredNodes] = useState(data);
-  const [hasFilters, setHasFilters] = useState(false);
-  const [filters, setFilters] = useState({
-    nodetype: 'All',
-    regions: 'All',
-    pools: 'All',
+  const [startDate, setStartDate] = useState(() => {
+    const ptFiveMinutesAgo = moment.tz(timeZone).subtract(5, 'minutes').format('YYYY-MM-DDTHH:mm');
+    return ptFiveMinutesAgo;
   });
-  const processVEPDGNodes = (nodes)=>{
-    return nodes.map((node)=>{
-      if(node.nodetype === 'vepdg'){
-        const kpiStats = node.stats?.OOR;
-        if(kpiStats){
-          if(kpiStats.att === 'InService'){
-            node.priority = 'normal';
-          }else if (kpiStats.att === 'OOR'){
-            node.priority = 'oor';
-          }else if (kpiStats.att === 'Error'){
-            node.priority = 'major';
-          }else {
-            node.priority = 'normal';
-          }
-        }else{
-          node.priority = 'normal';
-        }
-      }
-      return node;
-    });
+
+  const [chartFilters, setChartFilters] = React.useState({startDateTime: moment.tz(timeZone).subtract(24, 'hours').format('YYYY-MM-DDTHH:mm:ss'), endDateTime:  currentDate.format('YYYY-MM-DDTHH:mm:ss')});
+  const [from, setFrom] = useState(moment(chartFilters.startDateTime).valueOf());
+  const [to, setTo] = useState(moment(chartFilters.endDateTime).valueOf());
+  
+
+  const handlePopoverOpen = (event) => {
+    if (!enableContextMenu) {
+      return;
+    }
+    const target = event.currentTarget;
+    setAnchorEl(target);
   };
-  useEffect(() => {
-    if (data.length) {
-      // let temp = processVEPDGNodes([...data]);
-      if (!(priorityFilter.includes('oor'))) {
-        let temp = data.filter(_ => (_.nestStatus?.toLowerCase() === 'inservice' || _.nestStatus?.toLowerCase() === 'not_found') && !(_.isCombiNode == 1 && _.stats?.RC_Value?.att !== 50 && _.stats?.RC?.att !== 50));
-        temp = temp.filter((_) => {
-          // if(_.nodetype === 'vepdg'){
-          //   return true;
-          // }
-          return(
-            (_.nestStatus?.toLowerCase() === 'inservice' || _.nestStatus?.toLowerCase() === 'not_found') && !(_.isCombiNode == 1
-             && _.stats?.RC_Value?.att !== 50 && _.stats?.RC?.att !== 50
-            ));
-          });
-          temp = temp.filter((_) => {
-            if (_.nodetype === 'nrf') {
-              return _.ntwCheck === 'ON';
-            } else {
-              return true
-            }
-          });
-        setNodes(groupByPool(temp));
-        setBasefilters(getFilters(temp));
-        setFilteredNodes(groupByRegions(temp));
-      } else {
-        // console.log(data[0], "d")
-        setNodes(groupByPool(data));
-        setBasefilters(getFilters(data));
-        setFilteredNodes(groupByRegions(data));
-      }
-    }
-  }, [data, priorityFilter]);
 
-  const processFilters = (filters) => {
-    if (Object.keys(filters).length) {
-      let filtered = data.filter((node) => {
-        if (filters.nodetype && filters.nodetype !== 'All' && filters.nodetype !== node.nodetype) {
-          return false
-        } else if (filters.regions && filters.regions !== 'All' && filters.regions !== node.pool) {
-          return false
-        } else if (filters.pools && filters.pools !== 'All' && filters.pools !== node.pool) {
-          return false
+  const handlePopoverClose = () => {
+    // setTimeout(() => {
+    //   if (!mouseIsOver) {
+    //     setAnchorEl(null);
+    //   }
+    // })
+  };
+
+  const handleMouseEnterPopover = () => {
+    setMouseIsOver(true);
+  };
+
+  const handleMouseLeavePopover = () => {
+    setMouseIsOver(false);
+    setAnchorEl(null);
+  };
+
+  const open = Boolean(anchorEl);
+
+  const handleContextMenu = (event) => {
+    if (!enableContextMenu) {
+      return;
+    }
+    event.preventDefault();
+    setContextMenu(
+      contextMenu === null
+        ? {
+          mouseX: event.clientX - 2,
+          mouseY: event.clientY - 4,
         }
+        :
+        null,
+    );
+  };
 
-        return true;
-      });
+  const handleClose = () => {
+    setContextMenu(null);
+  };
 
-      if (filters.nodetype !== 'All' || filters.regions !== 'All' || filters.pools !== 'All' || filtered.length !== data.length) {
-        setHasFilters(true);
-      } else {
-        setHasFilters(false);
-      }
+  const getColorPriority = (priority) => {
+    switch (priority) {
+      case 'critical':
+        return '#ff0040';
+      case 'major':
+        return '#f2630a';
+      case 'minor':
+        return '#ffc33f';
+      case 'oor':
+        return '#0a58ca';
+      case 'normal':
+        return '#198754';
 
-      if (priorityFilter.includes('oor')) {
-        filtered = filtered?.filter(_ => (_.nestStatus?.toLowerCase() === 'inservice' || _.nestStatus?.toLowerCase() === 'not_found') && !(_.isCombiNode == 1 && _.stats?.RC_Value?.att !== 50 && _.stats?.RC?.att !== 50));
-        filtered = filtered.filter(_ => {
-          if (_.nodetype === 'nrf') {
-            return _.ntwCheck === 'ON';
+      default:
+        return 'rgb(128, 128, 128)';
+    }
+  }
+
+  const saveNote = async () => {
+    await axiosClient.post('/api/addNotes', { host_name: node.host_name, notes: note, expiresInDays: autoDelete });
+    syncNotes();
+    setOpenNotes(false);
+  }
+
+  const openSnack = (newState, message = '') => {
+    setSnackMessage(message);
+    setState({ ...newState, openSnackState: true });
+  };
+
+  const closeSnack = () => {
+    setState({ ...state, openSnackState: false });
+  };
+
+  const deleteNote = async (curr) => {
+    await axiosClient.put('/api/deactivateNotes', { host_name: curr.host_name, notes: curr.notes });
+    openSnack({ vertical: 'top', horizontal: 'center' }, 'Note has been deleted successfully!!');
+    syncNotes();
+    setCurr('');
+    setConfirmModal(false);
+    setViewOpenNotes(false);
+  }
+
+  const groupedStats = (stats) => {
+
+    if (!stats) {
+      return;
+    }
+
+    // const panels = Object.values(stats)?.reduce((acc, curr) => {
+    //   if (!acc[curr.panel]) {
+    //     acc[curr.panel] = [];
+    //     acc[curr.panel].push(curr);
+    //   } else {
+    //     acc[curr.panel].push(curr);
+    //   }
+
+    //   return acc;
+    // }, {});
+
+    if (node.nodetype === 'nrf') {
+      // for (const [kpi, kpivalue] of Object.entries(stats)) {
+      //   for (const [type, typevalue] of Object.entries(kpivalue)) {
+      //     const sorted = typevalue.sort((a, b) => (new Date(b.time_value) - new Date(a.time_value)));
+      //     const unique = sorted.filter((item, index, self) => self.findIndex((t) => t.time_value === item.time_value && t.kpi === item.kpi && t.host_name === item.host_name && t.nftype === item.nftype && t.type === item.type) === index);
+      //     stats[kpi][type] = unique;
+      //   }
+      // }
+      const panels = Object.values(stats)?.reduce((acc, curr) => {
+        if (curr['NRD']?.display_type) {
+          if (!acc[curr['NRD'].display_type]) {
+            acc[curr['NRD'].display_type] = [];
+            acc[curr['NRD'].display_type].push({...curr, kpi: curr['NRD'].kpi});
           } else {
-            return true
+            acc[curr['NRD'].display_type].push({...curr, kpi: curr['NRD'].kpi});
           }
-        });
-      }
-
-      if (priorityFilter.length > 0) {
-        filtered = filtered?.filter(_ => priorityFilter.includes(_.priority));
-      }
-
-      setFilteredNodes(groupByRegions(filtered));
-      setNodes(groupByPool(filtered));
+        }
+        return acc;
+      }, {}); 
+      return panels;
     } else {
-      setFilteredNodes(groupByRegions(data));
-      setHasFilters(false);
-      setNodes(groupByPool(data));
+      const panels = Object.values(stats)?.reduce((acc, curr) => {
+        if (!acc[curr.display_type]) {
+          acc[curr.display_type] = [];
+          acc[curr.display_type].push(curr);
+        } else {
+          acc[curr.display_type].push(curr);
+        }
+        return acc;
+      }, {}); 
+      return panels;
     }
   }
 
-  useEffect(() => {
-    if (data.length) {
-      processFilters(filters);
-    }
-  }, [filters, priorityFilter]);
-
-  const resetFilters = () => {
-    setFilters({ nodetype: 'All', regions: 'All', pools: 'All' });
-  }
-
-  const setSearch = (search) => {
-    if (search) {
-      const notefiltered = data.filter(_ => _.host_name?.toLowerCase()?.includes(search?.toLowerCase()));
-      const poolfiltered = data.filter(_ => _.pool?.toLowerCase()?.includes(search?.toLowerCase()));
-      const seen = {};
-      const filtered = [...notefiltered, ...poolfiltered].filter(item => !(item.host_name in seen) && (seen[item.host_name] = true));
-      setHasFilters(true);
-      setFilteredNodes(groupByRegions(filtered));
-      setNodes(groupByPool(filtered));
+  const getNodePanels = () => {
+    if (node.nodetype === 'mme') {
+      return [648,649,650,664,719,666,667,665,669,686,668,738,684,687,694,704,685,697,705,707,714,708,706,713,715,720,722,716,709,718,732,712,717,731,743,745,744,746,828]
+    } else if (node.nodetype === 'cscf') {
+      return [3]
     } else {
-      processFilters(filters);
+      return [5]
     }
   }
 
-  const syncNotes = () => {
-    fetchNotes();
-  }
-
-  const [degradedNodes, setDegradedNodes] = useState(false);
-
-  useEffect(() => {
-    if (degradedNodes) {
-      setPriorityFilter(['critical', 'major', 'minor']);
-    } else {
-      setPriorityFilter(['critical', 'major', 'minor', 'normal']);
+  function NameIcons(name) {
+    let formattedName = name;
+    if (!name) {
+      formattedName = 'Default, User';
+    } else if (name === 'Default User') {
+      formattedName = 'Default, User';
     }
-  }, [degradedNodes]);
-
-  // Set filtered notifications data
-  const [filteredNotifications, setFilteredNotifications] = useState({
-    allAlerts: [],
-    alerts: [],
-  });
-
-  // Process Notificaiton filters
-  const processNotificationFilters = () => {
-    let filteredAllAlerts;
-    let filteredAlerts;
-    const currentTime = new Date(); // Current time
-
-    // Time range filter
-    if(notificationsFilter.timeRange && notificationsFilter.timeRange == "1hr"){
-      const oneHourAgo = new Date(currentTime.getTime() - 60 * 60 * 1000); // Time one hour ago
-
-      // Filter objects based on timestamp
-      filteredAlerts = alerts.filter(obj => {
-          const objTime = new Date(obj.timestamp); 
-          return objTime >= oneHourAgo && objTime <= currentTime; 
-      });
-
-      // Filter objects based on timestamp
-      filteredAllAlerts = allAlerts.filter(obj => {
-        const objTime = new Date(obj.timestamp); 
-        return objTime >= oneHourAgo && objTime <= currentTime;
-      });
-    }else if(notificationsFilter.timeRange && notificationsFilter.timeRange == "24hrs"){
-      const oneDayAgo = new Date(currentTime.getTime() - 24 * 60 * 60 * 1000); // Time 24 hours ago
+    let [firstName, lastName] = formattedName.split(', ');
+    let firstLetterFirstName = firstName.charAt(0).toUpperCase();
+    let firstLetterLastName = lastName.charAt(0).toUpperCase();
   
-      // Filter objects based on timestamp
-      filteredAlerts = alerts.filter(obj => {
-          const objTime = new Date(obj.timestamp); 
-          return objTime >= oneDayAgo && objTime <= currentTime;
-      });  
-
-      // Filter objects based on timestamp
-      filteredAllAlerts = allAlerts.filter(obj => {
-        const objTime = new Date(obj.timestamp);
-        return objTime >= oneDayAgo && objTime <= currentTime;
-      });
-    }else {
-      filteredAlerts = alerts;
-      filteredAllAlerts = allAlerts;
-    }
-
-    // Priorities filter
-    if(notificationsFilter.priorities.length){
-      filteredAllAlerts = filteredAllAlerts.filter((alert) => notificationsFilter.priorities.includes(alert.priority));
-      filteredAlerts = filteredAlerts.filter((newAlert) => notificationsFilter.priorities.includes(newAlert.priority));
-    }
-
-    setFilteredNotifications({allAlerts: filteredAllAlerts, alerts: filteredAlerts});
+    return (
+      <div className="name-icons">
+        <div title={formattedName} className="icon">{firstLetterFirstName}{firstLetterLastName}</div>
+      </div>
+    );
   }
 
-  // Trigger when notifications filter changes
-  useEffect(() => {
-    processNotificationFilters()
-  }, [notificationsFilter, alerts, allAlerts])
+  const remainingDays = (date) => {
+    if (date) {
+      const currentDate = moment();
+      const deletionDate = moment(date);
+      const diffInDays = deletionDate.diff(currentDate, 'days');
+      return diffInDays;
+    } else {
+      return 7;
+    }
+  };
 
-  useEffect(() =>{
-    const fetchLocationMapping = async () => {
-      try{
-        const response = await axiosClient.get('/api/getLocation');
-        const data = response.data.data || {};
-        const mapping = {};
-        Object.entries(data).forEach(([techtype,nodes]) =>{
-          nodes.forEach(item => {
-            mapping[item.Node] = {
-              city:item.City,
-              omw:item.OMW,
-              state:item.State,
-            };
-          });
-        });
-        setLocationMapping(mapping);
-      }catch(error){
-        console.error('Error fetching location mapping:',error);
-      }
-    };
-    fetchLocationMapping();
-  },[]);
+  const handleChartFilterChange = (event, key) => {
+    setChartFilters({
+        ...chartFilters,
+        [key]: moment(event.target.value).format('YYYY-MM-DDTHH:mm:ss')
+    });
+  }
 
-  return <NodeContext.Provider value={{ nodes, setNodes, basefilters, filters, setFilters, filteredNodes, hasFilters, resetFilters, setSearch, dataLoading, syncNotes, oor, toggleOOR, alerts, allAlerts, notifications, setNotifications, error, setPriorityFilter, setDegradedNodes, priorityFilter, degradedNodes, setNotificationsFilter, notificationsFilter, setFilteredNotifications, filteredNotifications, tech: [...tech, ...techGrp] ,locationMapping, upfView, toggleUPFView, nestInfo, oor, toggleOOR }}>{children}</NodeContext.Provider>
-}
+  const updateGrafana = () => {
+      setFrom(moment(chartFilters.startDateTime).valueOf());
+      setTo(moment(chartFilters.endDateTime).valueOf());
+  }
+
+  return (
+    <>
+      <Snackbar
+        anchorOrigin={{ vertical, horizontal }}
+        open={openSnackState}
+        autoHideDuration={3000}
+        onClose={closeSnack}
+        key={vertical + horizontal}
+        style={{ top: 100 }}
+      >
+        <Alert
+          onClose={closeSnack}
+          severity="success"
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackMessage}
+        </Alert>
+      </Snackbar>
+      <Card style={{
+        ...style,
+        backgroundColor: bgcolor || getColorPriority(node?.priority),
+        color: color || 'white',
+        cursor: 'context-menu'
+      }} onClick={onClick} onContextMenu={handleContextMenu} >
+        <CardContent style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, paddingBottom: 8, paddingLeft: 5, paddingRight: 5, fontSize: '12px' }}>
+          <Typography onMouseEnter={handlePopoverOpen}
+            onMouseLeave={handlePopoverClose} aria-owns={open ? 'mouse-over-popover' : undefined}
+            aria-haspopup="true"
+            style={{ fontSize: 'inherit', fontWeight: 'inherit', width: 'auto',padding: 0 }} variant="body2">{node?.pool?.toUpperCase() ? (node?.isCombiNode == 1 ? node?.host_name?.toUpperCase() + '(Combi)' : node?.host_name?.toUpperCase())  + '::' + node?.pool?.toUpperCase() : node?.host_name?.toUpperCase()}</Typography>
+
+          {
+            node && node.notes && node.notes.length > 0 && (
+              <CommentIcon style={{ cursor: 'pointer', color: '#000', fontSize: '16px' }} onClick={() => setViewOpenNotes(true)} />
+            )
+          }
+        </CardContent>
+
+        {
+          enableContextMenu && (
+            <>
+              <Menu
+                open={contextMenu !== null}
+                onClose={handleClose}
+                anchorReference="anchorPosition"
+                anchorPosition={
+                  contextMenu !== null
+                    ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
+                    : undefined
+                }
+              >
+                <MenuItem onClick={() => {
+                  window.open(`https://wasp.eng.t-mobile.com/nodeinfo/${node.host_name?.toUpperCase()}`, '_blank');
+                  handleClose();
+                }}><HistoryIcon style={{ marginRight: '8px', color: "#d6006e" }} /> Node Info</MenuItem>
+                <MenuItem onClick={() => { setOpenChart(true); handleClose(); }}><ShowChartIcon style={{ marginRight: '8px', color: "#d6006e" }} />Charts</MenuItem>
+                <MenuItem onClick={() => { setOpenNotes(true); handleClose(); }}><NoteAddIcon style={{ marginRight: '8px', color: "#d6006e" }} />Add Notes</MenuItem>
+              </Menu>
+
+              <Popover
+                id="mouse-over-popover"
+                open={open}
+                anchorEl={anchorEl}
+                anchorOrigin={{
+                  vertical: 'center',
+                  horizontal: 'left',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'left',
+                }}
+                onClose={handlePopoverClose}
+                disableRestoreFocus
+
+              >
+                <Card onMouseEnter={handleMouseEnterPopover}
+                    onMouseLeave={handleMouseLeavePopover}
+                >
+                  <CardContent style={{ backgroundColor:'#bfab5b'}}
+                >
+                    {
+                      node?.stats && (
+                        <>
+                          {
+                            !node?.isCombiKpi ? (
+                              <KPIModalContent node={node} data={groupedStats(node?.stats)} />
+                            ) : (
+                              <CombiKPIModalContent node={node} data={groupedStats(node?.stats)} />
+                            )
+                          }
+                        </>
+                      )
+                    }
+                    {
+                      !node?.stats && (
+                        <Typography variant="h6" sx={{ color: '#d6006e' }}>No Data</Typography>
+                      )
+                    }
+                  </CardContent>
+                </Card>
+              </Popover>
+              <Modal
+                open={openChart}
+                onClose={() => { setOpenChart(false); }}
+                aria-labelledby="chart-modal-title"
+                aria-describedby="chart-modal-description"
+              >
+                <Box sx={modal}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', color: '#d6006e' }}>
+                    <Typography id="chart-modal-title" variant="h6" component="h2">
+                      {node.host_name?.toUpperCase() + '::' + node.pool} - KPI Chart
+                    </Typography>
+
+                    <IconButton sx={{ color: '#d6006e' }} onClick={() => { setOpenChart(false); }}><CloseIcon /></IconButton>
+                  </Box>
+                  <Box sx={{ marginTop: 2, marginBottom: 2, display: 'flex', alignItems: 'center' }}>
+                    <TextField
+                      label="Start Date"
+                      type="datetime-local"
+                      value={chartFilters.startDateTime ? moment(chartFilters.startDateTime).format('YYYY-MM-DDTHH:mm:ss') : ''}
+                      onChange={(event) => handleChartFilterChange(event, 'startDateTime')}
+                      sx={{ marginRight: 1 }}
+                    />
+                    <TextField
+                      label="End Date"
+                      type="datetime-local"
+                      value={chartFilters.endDateTime ? moment(chartFilters.endDateTime).format('YYYY-MM-DDTHH:mm:ss') : ''}
+                      onChange={(event) => handleChartFilterChange(event, 'endDateTime')}
+                      sx={{ marginRight: 1 }}
+                    />
+                    <Button variant="contained" color="primary" onClick={updateGrafana}>Update Chart</Button>
+                  </Box>
+                  {from && to &&
+                    <iframe
+                      src={`https://grafana.tools.nsds.t-mobile.com/d-solo/ZB5uWsLMk/national-heatmap?orgId=1&var-measurement=${node?.nodetype}&var-poolname=${node?.pool}&var-nodename=${node?.host_name}&from=${from}&to=${to}&panelId=${node?.nodetype === 'nrf' ? 85 : 833}&theme=light`}
+                      style={{ width: '100%', height: '350px', border: 'none' }}
+                      frameBorder="0"
+                    ></iframe>
+                    // <Grid container rowSpacing={1} columnSpacing={{ xs: 1, sm: 2, md: 3 }}>
+                    //   {/* <Typography>{getNodePanels()}</Typography> */}
+                    //   {getNodePanels().map(panel => 
+                    //     (
+                    //       <Grid item xs={6}>
+                    //         <iframe
+                    //           src={`https://grafana.tools.nsds.t-mobile.com/d-solo/ZB5uWsLMk/national-heatmap?orgId=1&var-measurement=${node?.nodetype}&var-poolname=${node?.pool}&var-nodename=${node?.host_name}&from=${from}&to=${to}&panelId=${panel}&theme=light`}
+                    //           style={{ width: '100%', height: '350px', border: 'none' }}
+                    //           frameBorder="0"
+                    //         ></iframe>
+                    //       </Grid>
+                    //     )
+                    //   )}
+                    // </Grid> 
+                  }
+                </Box>
+              </Modal>
+              <Modal
+                open={openNotes}
+                onClose={() => { setOpenNotes(false); }}
+                aria-labelledby="notes-modal-title"
+                aria-describedby="notes-modal-description"
+              >
+                <Box sx={modalNotes}>
+                  <Typography sx={{ color: '#d6006e' }} id="notes-modal-title" variant="h6" component="h2">
+                    Add Notes for {node.host_name?.toUpperCase()}
+                  </Typography>
+                  <Input id="notes" aria-describedby="notes" label="Notes" multiline sx={{ width: '100%', marginBottom: '16px' }} onChange={(e) => { setNote(e.target.value) }} fullWidth />
+                  <FormControl sx={{ marginTop: '8px', width: '32%' }}>
+                      <InputLabel id="auto-delete-label">Auto Delete</InputLabel>
+                      <Select
+                          labelId="auto-delete-label"
+                          id="auto-delete"
+                          value={autoDelete}
+                          onChange={(e) => setAutoDelete(e.target.value)}
+                      >
+                          <MenuItem value={1}>1 day</MenuItem>
+                          <MenuItem value={2}>2 days</MenuItem>
+                          <MenuItem value={3}>3 days</MenuItem>
+                          <MenuItem value={4}>4 days</MenuItem>
+                          <MenuItem value={5}>5 days</MenuItem>
+                          <MenuItem value={6}>6 days</MenuItem>
+                          <MenuItem value={7}>7 days</MenuItem>
+                      </Select>
+                  </FormControl>
+                  <Button sx={{ marginTop: '8px', marginLeft: '8px', height: '56px', width: '32%' }} variant="contained" onClick={() => { saveNote() }}>Submit</Button>
+                  <Button sx={{ marginTop: '8px', marginLeft: '8px', height: '56px', width: '32%' }} variant="outlined" onClick={() => { setOpenNotes(false); }}>Cancel</Button>
+                </Box>
+              </Modal>
+              <Modal
+                open={confirmModal}
+                onClose={() => { setConfirmModal(false); }}
+                aria-labelledby="notes-confirm-modal-title"
+                aria-describedby="notes-confirm-modal-description"
+              >
+                <Box sx={modalNotes}>
+                  <Typography sx={{ color: '#d6006e' }} id="notes-confirm-modal-title" variant="h6" component="h2">
+                    Confirm deleting the Note!
+                  </Typography>
+                  <Button sx={{ marginTop: '8px' }} variant="contained" onClick={() => { deleteNote(curr); }}>Confirm</Button>
+                  <Button sx={{ marginTop: '8px', marginLeft: '8px' }} variant="outlined" onClick={() => { setConfirmModal(false); }}>Cancel</Button>
+                </Box>
+              </Modal>
+              <Modal
+                open={openViewNotes}
+                onClose={() => { setViewOpenNotes(false); }}
+                aria-labelledby="notes-modal-title"
+                aria-describedby="notes-modal-description"
+              >
+                <Box sx={modalNotes}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+                    <Typography sx={{ color: '#d6006e' }} id="notes-modal-title" variant="h6" component="h2">
+                      {node.host_name?.toUpperCase()} Notes
+                    </Typography>
+                    <IconButton sx={{ color: '#d6006e' }} onClick={() => { setViewOpenNotes(false); }}><CloseIcon /></IconButton>
+                  </div>
+                  {
+                    node && node.notes && (
+                      node.notes.map((note, index) => (
+                        <div style={{ margin: '8px 0', border: '1px solid #d6006e', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', }} key={index}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            {NameIcons(note?.updated_by)}
+                            <Box>
+                              <Typography sx={{ fontSize: '24px' }} id="notes-modal-title" variant="body">
+                                {note.notes}
+                              </Typography>
+                              <Typography sx={{ fontSize: '12px' }}>{new Date(note.updated_at).toLocaleDateString()}</Typography>
+                            </Box>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <AutoDeleteIcon sx={{marginRight: '8px'}}/>{remainingDays(note?.expires_at) + 1}
+                            <IconButton sx={{ color: '#d6006e', marginLeft: '8px' }} onClick={() => { setCurr(note); setConfirmModal(true); }}><DeleteIcon /></IconButton>
+                          </Box>
+                        </div>
+                      ))
+                    )
+                  }
+                </Box>
+              </Modal>
+            </>
+          )
+        }
+      </Card>
+    </>
+  );
+};
+
+export default Node;
