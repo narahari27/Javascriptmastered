@@ -1,303 +1,195 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axiosClient from '../api/client';
+import React, { useContext, useEffect, useState } from "react";
+import { useSelector, useDispatch } from "react-redux";
+import { startPolling } from "../polling";
+import { store } from "../store";
+import {
+    setFilters as setFilters2,
+    resetFilters as resetFilters2,
+    setSearch as setSearch2,
+    setPriorityFilter as setPriorityFilter2,
+    setNestData,
+} from "../reducers/nodeSlice";
+import {
+    CircularProgress,
+    Grid,
+    Stack,
+    Checkbox,
+    Button,
+    Box,
+    Typography,
+    FormControl,
+    InputLabel,
+    MenuItem,
+    Select,
+    IconButton,
+    TextField,
+    InputAdornment,
+    Snackbar,
+    Alert,
+} from "@mui/material";
+import { NodeContext } from "../NodeContext";
+import SyncIcon from "@mui/icons-material/Sync";
+import SearchIcon from "@mui/icons-material/Search";
+import Notifications from "./Notifications";
+import Region from "./Region";
+import Region2 from "./Region2";
 
-const groupData = (data) => {
-  const grouped = {};
+const Dashboard = () => {
+    const dispatch = useDispatch();
+    const nodesData = useSelector((state) => state.nodes);
+    const {
+        nodes,
+        filters,
+        basefilters,
+        resetFilters,
+        setSearch,
+        setPriorityFilter,
+        priorityFilter,
+        upfView,
+    } = useContext(NodeContext);
 
-  data.forEach(entry => {
-    const pool = entry.pool;
-    const market = entry.market_name;
-    const rack = entry.rack_name;
-    const host = {
-      host_name: entry.host_name,
-      nodetype: entry.nodetype,
-      kpis: entry.kpis,
-      kpiHeaders: entry.kpiHeaders
+    const [selectedFilters, setSelectedFilters] = useState(priorityFilter);
+    const [selectedFilters2, setSelectedFilters2] = useState(nodesData.priorityFilters);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [scale, setScale] = useState(1);
+
+    useEffect(() => {
+        setSelectedFilters(priorityFilter);
+    }, [priorityFilter]);
+
+    useEffect(() => {
+        startPolling(store);
+    }, []);
+
+    // Context-based filter toggle
+    const handleFilterToggle = (value, e) => {
+        if (selectedFilters.includes(value)) {
+            const updatedFilters = selectedFilters.filter((filter) => filter !== value);
+            setSelectedFilters(updatedFilters);
+            setPriorityFilter(updatedFilters); // Update context
+        } else {
+            const updatedFilters = [...selectedFilters, value];
+            setSelectedFilters(updatedFilters);
+            setPriorityFilter(updatedFilters); // Update context
+        }
     };
 
-    if (!grouped[pool]) {
-      grouped[pool] = {};
-    }
-
-    if (rack) {
-      if (!grouped[pool][market]) {
-        grouped[pool][market] = {};
-      }
-  
-      if (!grouped[pool][market][rack]) {
-        grouped[pool][market][rack] = [];
-      }
-  
-      grouped[pool][market][rack].push(host);
-    } else {
-      if (!grouped[pool][market]) {
-        grouped[pool][market] = {};
-      }
-  
-      if (!grouped[pool][market]['SMFRACK']) {
-        grouped[pool][market]['SMFRACK'] = [];
-      }
-  
-      grouped[pool][market]['SMFRACK'].push(host);
-    }
-  });
-
-  return grouped;
-}
-
-const getFilters = (data) => {
-  return data.reduce((acc, curr) => {
-    if (acc.pools.indexOf(curr.pool) === -1) {
-      acc.pools.push(curr.pool)
-    }
-
-    if (acc.markets.indexOf(curr.market_name) === -1) {
-      acc.markets.push(curr.market_name)
-    }
-
-    if (acc.racks.indexOf(curr.rack_name) === -1) {
-      acc.racks.push(curr.rack_name)
-    }
-
-    if (acc.nodetype.indexOf(curr.nodetype) === -1) {
-      acc.nodetype.push(curr.nodetype)
-    }
-
-    if (acc.regions.indexOf(curr.timezone) === -1) {
-      acc.regions.push(curr.timezone)
-    }
-
-    return acc
-  }, {
-    nodetype: ['All'],
-    regions: ['All'],
-    pools: ['All'],
-    markets: ['All'],
-    racks: ['All']
-  })
-}
-
-const buildQuery = (url, params) => {
-  return `${url}?${new URLSearchParams(params).toString()}`;
-}
-
-const processFilters = (filters, data) => {
-  if (Object.keys(filters).length) {
-    let filtered = data.filter((node) => {
-      if (filters.nodetype && filters.nodetype !== 'All' && filters.nodetype !== node.nodetype) {
-        return false
-      } else if (filters.regions && filters.regions !== 'All' && filters.regions !== node.pool) {
-        return false
-      } else if (filters.pools && filters.pools !== 'All' && filters.pools !== node.pool) {
-        return false
-      }
-      if (filters.markets && filters.markets !== 'All' && filters.markets !== node.market_name) {
-        return false
-      }
-      if (filters.racks && filters.racks !== 'All' && filters.racks !== node.rack_name) {
-        return false
-      }
-      return true;
-    });
-
-    return filtered
-  } else {
-    return data;
-  }
-}
-
-const processPriority = (filters, state) => {
-  let filtered = state.data.filter((node) => {
-    if (node.host_name && node.host_name != 'null') {
-      return (filters.includes(state.priorityData[node.host_name]))
-    } else if (node.rack_name && node.rack_name != 'null') {
-      return filters.includes(state.priorityData[node.rack_name])
-    } else if (node.market_name && node.market_name != 'null') {
-      return filters.includes(state.priorityData[node.market_name])
-    } else {
-      return false
-    }
-  })
-
-  // if (!filters.includes('oor')) {
-  //   filtered = filtered.filter((_) => {
-  //     return (state.nest[_.host_name] == 'InService' || state.nest[_.host_name] == 'NOT_FOUND')
-  //   })
-  // } else {
-  //   filtered = filtered.filter((_) => {
-  //     return (state.nest[_.host_name] != 'InService' && state.nest[_.host_name] != 'NOT_FOUND')
-  //   })
-  // }
-
-  return processFilters(state.filters, filtered);
-}
-
-const setPriorityDataFunc = (stats, nest) => {
-  const priorityData = {};
-
-  Object.keys(stats).forEach((key) => {
-    const pr = stats[key].map(_ => _.priority)
-    const priority = [...new Set(pr)];
-    if (nest && (nest[key] != 'InService' && nest[key] != 'NOT_FOUND')) {
-      priorityData[key] = 'oor'
-    } else {
-      if (priority.length > 0) {
-        if (priority.indexOf('critical') !== -1) {
-            priorityData[key] = 'critical'
-        } else if (priority.indexOf('major') !== -1) {
-            priorityData[key] = 'major'
-        } else if (priority.indexOf('minor') !== -1) {
-            priorityData[key] = 'minor'
-        } else if (priority.indexOf('normal') !== -1) {
-            priorityData[key] = 'normal'
+    // Redux-based filter toggle
+    const handleFilterToggle2 = (value, e) => {
+        if (selectedFilters2.includes(value)) {
+            const updatedFilters = selectedFilters2.filter((filter) => filter !== value);
+            setSelectedFilters2(updatedFilters);
+            dispatch(setPriorityFilter2({ filters: updatedFilters, current: nodesData }));
         } else {
-            priorityData[key] = 'oor'
+            const updatedFilters = [...selectedFilters2, value];
+            setSelectedFilters2(updatedFilters);
+            dispatch(setPriorityFilter2({ filters: updatedFilters, current: nodesData }));
         }
-    }
-    }
-  })
+    };
 
-  return priorityData;
-}
+    const handleZoomIn = () => {
+        if (scale < 1) {
+            setScale(scale + 0.1);
+        }
+    };
 
-const processNotes = (data) => {
-  if (data && data.length) {
-    return data.reduce((acc, curr) => {
-      if (!acc[curr.host_name]) {
-        acc[curr.host_name] = [];
-      }
-      acc[curr.host_name].push(curr);
-      return acc
-    }, {});
-  } else {
-    return {}
-  }
-}
+    const handleZoomOut = () => {
+        if (scale > 0.2) {
+            setScale(scale - 0.1);
+        }
+    };
 
-export const fetchApi = createAsyncThunk(
-  'api/fetchApi',
-  async ({ url, query, type }, { rejectWithValue }) => {
-    try {
-      const uri = query ? buildQuery(url, query) : url;
-      const resp = await axiosClient.get(uri);
-      return { type, data: resp.data };
-    } catch (err) {
-      return rejectWithValue({ type, data: [] });
-    }
-  }
-);
+    const layout = () => {
+        return (
+            <>
+                <Grid container gap={2} sx={{ marginBottom: "24px" }}>
+                    {/* Context-Based Filters */}
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <Checkbox
+                            checked={selectedFilters.includes("critical")}
+                            onChange={(e) => handleFilterToggle("critical", e)}
+                        />
+                        <Typography sx={{ marginLeft: "4px" }} variant="body">
+                            Critical
+                        </Typography>
+                    </Box>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <Checkbox
+                            checked={selectedFilters.includes("major")}
+                            onChange={(e) => handleFilterToggle("major", e)}
+                        />
+                        <Typography sx={{ marginLeft: "4px" }} variant="body">
+                            Major
+                        </Typography>
+                    </Box>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <Checkbox
+                            checked={selectedFilters.includes("minor")}
+                            onChange={(e) => handleFilterToggle("minor", e)}
+                        />
+                        <Typography sx={{ marginLeft: "4px" }} variant="body">
+                            Minor
+                        </Typography>
+                    </Box>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <Checkbox
+                            checked={selectedFilters.includes("normal")}
+                            onChange={(e) => handleFilterToggle("normal", e)}
+                        />
+                        <Typography sx={{ marginLeft: "4px" }} variant="body">
+                            Normal
+                        </Typography>
+                    </Box>
+                </Grid>
 
-// Initial state
-const initialState = {
-  data: [],
-  nodes: [],
-  nest: [],
-  notes: [],
-  stats: [],
-  loading: false,
-  error: null,
-  baseFilters: [],
-  filters: {
-    nodetype: 'All',
-    regions: 'All',
-    pools: 'All',
-    markets: 'All',
-    racks: 'All'
-  },
-  filteredNodes: [],
-  locationMapping: {},
-  priorityFilters: ['normal', 'major', 'minor', 'critical'],
-  priorityData: {},
-  notes: {},
-  nest: {}
+                <Grid container gap={2} sx={{ marginBottom: "24px" }}>
+                    {/* Redux-Based Filters */}
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <Checkbox
+                            checked={selectedFilters2.includes("critical")}
+                            onChange={(e) => handleFilterToggle2("critical", e)}
+                        />
+                        <Typography sx={{ marginLeft: "4px" }} variant="body">
+                            Critical (Redux)
+                        </Typography>
+                    </Box>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <Checkbox
+                            checked={selectedFilters2.includes("major")}
+                            onChange={(e) => handleFilterToggle2("major", e)}
+                        />
+                        <Typography sx={{ marginLeft: "4px" }} variant="body">
+                            Major (Redux)
+                        </Typography>
+                    </Box>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <Checkbox
+                            checked={selectedFilters2.includes("minor")}
+                            onChange={(e) => handleFilterToggle2("minor", e)}
+                        />
+                        <Typography sx={{ marginLeft: "4px" }} variant="body">
+                            Minor (Redux)
+                        </Typography>
+                    </Box>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <Checkbox
+                            checked={selectedFilters2.includes("normal")}
+                            onChange={(e) => handleFilterToggle2("normal", e)}
+                        />
+                        <Typography sx={{ marginLeft: "4px" }} variant="body">
+                            Normal (Redux)
+                        </Typography>
+                    </Box>
+                </Grid>
+            </>
+        );
+    };
+
+    return (
+        <div style={{ overflowX: "auto", whiteSpace: "nowrap", padding: 20 }}>
+            {layout()}
+        </div>
+    );
 };
 
-const nodeSlice = createSlice({
-  name: 'nodes',
-  initialState,
-  reducers: {
-    setFilters: (state, action) => {
-      const {selected, data} = action.payload;
-      const filtered = processFilters(selected, data)
-      state.filters = selected;
-      state.baseFilters = getFilters(filtered);
-      state.nodes = groupData(filtered);
-    },
-    resetFilters: (state, action) => {
-      state.filters = {
-        nodetype: 'All',
-        regions: 'All',
-        pools: 'All',
-        markets: 'All',
-        racks: 'All'
-      };
-      state.priorityFilters = ['normal', 'major', 'minor', 'critical']
-      state.baseFilters = getFilters(action.payload);
-      state.nodes = groupData(action.payload);
-    },
-    setPriorityFilter: (state, action) => {
-      const {current, filters} = action.payload;
-      state.priorityFilters = filters;
-      const processed = processPriority(filters, current);
-      if (processed.length) {
-        state.nodes = groupData(processed)
-      }
-    },
-    setSearch: (state, action) => {
-      const {search, selected, data} = action.payload;
-      const notefiltered = data.filter(_ => _.host_name?.toLowerCase()?.includes(search?.toLowerCase()));
-      const poolfiltered = data.filter(_ => _.pool?.toLowerCase()?.includes(search?.toLowerCase()));
-      const marketfiltered = data.filter(_ => _.market_name?.toLowerCase()?.includes(search?.toLowerCase()));
-      const rackfiltered = data.filter(_ => _.rack_name?.toLowerCase()?.includes(search?.toLowerCase()));
-      const seen = {};
-      const filtered = [...notefiltered, ...poolfiltered, ...marketfiltered, ...rackfiltered].filter(item => !(item.host_name in seen) && (seen[item.host_name] = true));
-      const appliedFiltered = processFilters(selected, filtered);
-      state.baseFilters = getFilters(appliedFiltered);
-      state.nodes = groupData(appliedFiltered);
-      state.filters = selected;
-    },
-    setNotesData: (state, action) => {
-      state.notes = processNotes(action.payload)
-    },
-    setNestData: (state, action) => {
-      const {current, nest} = action.payload;
-      state.nest = nest;
-      state.priorityData = setPriorityDataFunc(current.stats, nest);
-    }
-  },
-  extraReducers: (builder) => {
-    builder
-      .addCase(fetchApi.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(fetchApi.fulfilled, (state, action) => {
-        state.loading = false;
-        if (action.payload?.type) {
-          if (action.payload.data) {
-            if (action.payload.type === 'nodes') {
-              state.data = action.payload.data.config;
-              state.baseFilters = getFilters(action.payload.data.config);
-              state.nodes = groupData(action.payload.data.config);
-            } else {
-              const stat = {...state[action.payload.type], ...action.payload.data.data}
-              state[action.payload.type] = stat;
-              state.priorityData = setPriorityDataFunc(stat);
-            }
-          }
-        } else {
-          console.warn('Missing type in fetchApi fulfilled payload', action.payload);
-        }
-      })
-      .addCase(fetchApi.rejected, (state, action) => {
-        state.loading = false;
-        if (action.payload?.type) {
-          state[action.payload.type] = action.payload.data;
-        } else {
-          console.error('Missing type in fetchApi rejected payload', action.payload);
-        }
-      });
-  }
-});
-
-export const { setFilters, resetFilters, setSearch, setPriorityFilter, setNotesData, setNestData } = nodeSlice.actions;
-export default nodeSlice.reducer;
+export default Dashboard;
