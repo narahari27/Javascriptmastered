@@ -1,520 +1,1005 @@
-import React, { useState, useContext, useEffect, Fragment } from 'react';
-import { Card, CardContent, Typography, Menu, MenuItem, Popover, Modal, Box, Input, Button, IconButton, TextField, FormControl, InputLabel, Select, Grid } from '@mui/material';
+import React, { useContext, useEffect, useState } from "react";
+import { useSelector, useDispatch } from "react-redux";
+import { startPolling } from "../polling";
+import { store } from "../store";
+import { setFilters as setFilters2, resetFilters as resetFilters2, setSearch as setSearch2, setPriorityFilter as setPriorityFilter2, setNestData } from "../reducers/nodeSlice";
+import { CircularProgress, Grid, Stack, Checkbox, Button } from "@mui/material";
 import { NodeContext } from "../NodeContext";
-import HistoryIcon from '@mui/icons-material/History';
-import ShowChartIcon from '@mui/icons-material/ShowChart';
-import NoteAddIcon from '@mui/icons-material/NoteAdd';
-import NotesIcon from '@mui/icons-material/Notes';
-import CloseIcon from '@mui/icons-material/Close';
-import KPIModalContent from './KPIModalContent';
-import CombiKPIModalContent from './CombiKPIModalContent';
-import axiosClient from '../api/client';
-import Snackbar from '@mui/material/Snackbar';
-import Alert from '@mui/material/Alert';
-import DeleteIcon from '@mui/icons-material/Delete';
-import CommentIcon from '@mui/icons-material/Comment';
-import AutoDeleteIcon from '@mui/icons-material/AutoDelete';
-import moment from 'moment-timezone';
+import Box from "@mui/material/Box";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import FormControl from "@mui/material/FormControl";
+import Select, { SelectChangeEvent } from "@mui/material/Select";
+import SyncIcon from "@mui/icons-material/Sync";
+import IconButton from "@mui/material/IconButton";
+import SearchIcon from "@mui/icons-material/Search";
+import TextField from "@mui/material/TextField";
+import InputAdornment from "@mui/material/InputAdornment";
+import { styled } from "@mui/material/styles";
+import FormGroup from "@mui/material/FormGroup";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Switch from "@mui/material/Switch";
+import Typography from "@mui/material/Typography";
+import SquareIcon from "@mui/icons-material/Square";
+import ViewModuleIcon from "@mui/icons-material/ViewModule";
+import AppsIcon from "@mui/icons-material/Apps";
+import Snackbar from "@mui/material/Snackbar";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Paper,
+} from "@mui/material";
+import EngineeringIcon from "@mui/icons-material/Engineering";
+import Alert from "@mui/material/Alert";
+import ZoomInIcon from "@mui/icons-material/ZoomIn";
+import ZoomOutIcon from "@mui/icons-material/ZoomOut";
 
-const timeZone = 'UTC';
+import NodeGroup from "./NodeGroup";
+import Notifications from "./Notifications";
+import Region from "./Region";
+import Region2 from "./Region2";
+import { CheckBox, Sync } from "@mui/icons-material";
 
-const modal = {
-  position: 'absolute',
-  top: '50%',
-  left: '50%',
-  transform: 'translate(-50%, -50%)',
-  minWidth: 400,
-  bgcolor: 'background.paper',
-  border: '2px solid #000',
-  boxShadow: 24,
-  padding: 4,
-  width: '85%',
-  maxHeight: '85vh', 
-  overflowY: 'auto',
+const styles = {
+  table: {
+    borderCollapse: "collapse",
+    border: "1px solid #e0e0e0",
+    minWidth: 400,
+  },
+  tableHead: {
+    backgroundColor: "#d6006e",
+    color: "#fff",
+  },
+  tableCell: {
+    border: "1px solid #e0e0e0",
+    padding: "2px",
+    color: "inherit",
+    fontSize: "12px",
+  },
 };
 
-const modalNotes = {
-  position: 'absolute',
-  top: '50%',
-  left: '50%',
-  transform: 'translate(-50%, -50%)',
-  minWidth: 400,
-  bgcolor: 'background.paper',
-  border: '2px solid #000',
-  boxShadow: 24,
-  p: 4
-};
+const IOSSwitch = styled((props) => (
+  <Switch focusVisibleClassName=".Mui-focusVisible" disableRipple {...props} />
+))(({ theme }) => ({
+  width: 42,
+  height: 26,
+  padding: 0,
+  "& .MuiSwitch-switchBase": {
+    padding: 0,
+    margin: 2,
+    transitionDuration: "300ms",
+    "&.Mui-checked": {
+      transform: "translateX(16px)",
+      color: "#fff",
+      "& + .MuiSwitch-track": {
+        backgroundColor:
+          theme.palette.mode === "dark" ? "#2ECA45" : "rgb(214, 0, 110)",
+        opacity: 1,
+        border: 0,
+      },
+      "&.Mui-disabled + .MuiSwitch-track": {
+        opacity: 0.5,
+      },
+    },
+    "&.Mui-focusVisible .MuiSwitch-thumb": {
+      color: "#33cf4d",
+      border: "6px solid #fff",
+    },
+    "&.Mui-disabled .MuiSwitch-thumb": {
+      color:
+        theme.palette.mode === "light"
+          ? theme.palette.grey[100]
+          : theme.palette.grey[600],
+    },
+    "&.Mui-disabled + .MuiSwitch-track": {
+      opacity: theme.palette.mode === "light" ? 0.7 : 0.3,
+    },
+  },
+  "& .MuiSwitch-thumb": {
+    boxSizing: "border-box",
+    width: 22,
+    height: 22,
+  },
+  "& .MuiSwitch-track": {
+    borderRadius: 26 / 2,
+    backgroundColor:
+      theme.palette.mode === "light" ? "rgb(214, 0, 110)" : "#39393D",
+    opacity: 1,
+    transition: theme.transitions.create(["background-color"], {
+      duration: 500,
+    }),
+  },
+}));
 
-const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }) => {
-  const currentDate = moment().tz(timeZone);
+const DashBoard = () => {
   const [state, setState] = React.useState({
     openSnackState: false,
-    vertical: 'top',
-    horizontal: 'center',
+    vertical: "top",
+    horizontal: "right",
   });
+  const dispatch = useDispatch();
+  const nodesData = useSelector((state) => state.nodes)
   const { vertical, horizontal, openSnackState } = state;
-  const [snackMessage, setSnackMessage] = useState('');
-  const { syncNotes } = useContext(NodeContext);
-  const [contextMenu, setContextMenu] = useState(null);
-  const [anchorEl, setAnchorEl] = React.useState(null);
-  const [openNotes, setOpenNotes] = useState(false);
-  const [openViewNotes, setViewOpenNotes] = useState(false);
-  const [openChart, setOpenChart] = useState(false);
-  const [mouseIsOver, setMouseIsOver] = useState(false);
-  const [note, setNote] = useState('');
-  const [curr, setCurr] = useState('');
-  const [confirmModal, setConfirmModal] = useState(false);
-  const [confirm, setConfirm] = useState(false);
-  const [endDate, setEndDate] = useState(() => {
-    const ptNow = moment.tz(timeZone).format('YYYY-MM-DDTHH:mm');
-    return ptNow;
-  });
-  const [autoDelete, setAutoDelete] = useState(7);
-  
-  const [startDate, setStartDate] = useState(() => {
-    const ptFiveMinutesAgo = moment.tz(timeZone).subtract(5, 'minutes').format('YYYY-MM-DDTHH:mm');
-    return ptFiveMinutesAgo;
-  });
+  const {
+    nodes,
+    basefilters,
+    filters,
+    setFilters,
+    filteredNodes,
+    hasFilters,
+    resetFilters,
+    setSearch,
+    dataLoading,
+    alerts,
+    notifications,
+    error,
+    setPriorityFilter,
+    setDegradedNodes,
+    degradedNodes,
+    priorityFilter,
+    upfView,
+    toggleUPFView,
+    toggleOOR,
+    nestInfo,
+    toggleLoader
+  } = useContext(NodeContext);
+  const [view, setView] = React.useState(
+    localStorage.getItem("view")
+      ? localStorage.getItem("view") === "true"
+        ? true
+        : false
+      : false
+  );
 
-  const [chartFilters, setChartFilters] = React.useState({startDateTime: moment.tz(timeZone).subtract(24, 'hours').format('YYYY-MM-DDTHH:mm:ss'), endDateTime:  currentDate.format('YYYY-MM-DDTHH:mm:ss')});
-  const [from, setFrom] = useState(moment(chartFilters.startDateTime).valueOf());
-  const [to, setTo] = useState(moment(chartFilters.endDateTime).valueOf());
-  
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm2, setSearchTerm2] = useState("");
+  const [scale, setScale] = useState(1);
 
-  const handlePopoverOpen = (event) => {
-    if (!enableContextMenu) {
-      return;
+  const handleZoomIn = () => {
+    if (scale < 1) {
+      setScale(scale + 0.1);
     }
-    const target = event.currentTarget;
-    setAnchorEl(target);
   };
 
-  const handlePopoverClose = () => {
-    setTimeout(() => {
-      if (!mouseIsOver) {
-        setAnchorEl(null);
-      }
-    })
-  };
-
-  const handleMouseEnterPopover = () => {
-    setMouseIsOver(true);
-  };
-
-  const handleMouseLeavePopover = () => {
-    setMouseIsOver(false);
-    setAnchorEl(null);
-  };
-
-  const open = Boolean(anchorEl);
-
-  const handleContextMenu = (event) => {
-    if (!enableContextMenu) {
-      return;
+  const handleZoomOut = () => {
+    if (scale > 0.2) {
+      setScale(scale - 0.1);
     }
+  };
+
+  const handleChange = (event) => {
+    setSearchTerm(event.target.value);
+  };
+
+  const handleSubmit = (event) => {
     event.preventDefault();
-    setContextMenu(
-      contextMenu === null
-        ? {
-          mouseX: event.clientX - 2,
-          mouseY: event.clientY - 4,
-        }
-        :
-        null,
-    );
+    setSearch(searchTerm);
   };
 
-  const handleClose = () => {
-    setContextMenu(null);
-  };
-
-  const getColorPriority = (priority) => {
-    switch (priority) {
-      case 'critical':
-        return '#ff0040';
-      case 'major':
-        return '#f2630a';
-      case 'minor':
-        return '#ffc33f';
-      case 'oor':
-        return '#0a58ca';
-      case 'normal':
-        return '#198754';
-
-      default:
-        return 'rgb(128, 128, 128)';
-    }
-  }
-
-  const saveNote = async () => {
-    await axiosClient.post('/api/addNotes', { host_name: node.host_name, notes: note, expiresInDays: autoDelete });
-    syncNotes();
-    setOpenNotes(false);
-  }
-
-  const openSnack = (newState, message = '') => {
-    setSnackMessage(message);
+  const openSnack = (newState, message = "") => {
     setState({ ...newState, openSnackState: true });
+
+    setTimeout(() => {
+      closeSnack();
+    }, 10000);
   };
+
+  React.useEffect(() => {
+    if (alerts.filter((x) => x.priority !== "normal").length > 0) {
+      openSnack({ vertical: "top", horizontal: "right" });
+    } else {
+      closeSnack();
+    }
+  }, [alerts]);
 
   const closeSnack = () => {
     setState({ ...state, openSnackState: false });
   };
 
-  const deleteNote = async (curr) => {
-    await axiosClient.put('/api/deactivateNotes', { host_name: curr.host_name, notes: curr.notes });
-    openSnack({ vertical: 'top', horizontal: 'center' }, 'Note has been deleted successfully!!');
-    syncNotes();
-    setCurr('');
-    setConfirmModal(false);
-    setViewOpenNotes(false);
-  }
+  useEffect(() => {
+    setSelectedFilters(priorityFilter);
+  }, [priorityFilter]);
 
-  const groupedStats = (stats) => {
+  useEffect(() => {
+    startPolling(store);
+  }, []);
 
-    if (!stats) {
-      return;
-    }
+  const getColorPriority = (priority) => {
+    switch (priority) {
+      case "critical":
+        return "#ff0040";
+      case "major":
+        return "#f2630a";
+      case "minor":
+        return "#ffc33f";
+      case "oor":
+        return "#0a58ca";
+      case "normal":
+        return "#198754";
 
-    // const panels = Object.values(stats)?.reduce((acc, curr) => {
-    //   if (!acc[curr.panel]) {
-    //     acc[curr.panel] = [];
-    //     acc[curr.panel].push(curr);
-    //   } else {
-    //     acc[curr.panel].push(curr);
-    //   }
-
-    //   return acc;
-    // }, {});
-
-    if (node.nodetype === 'nrf') {
-      // for (const [kpi, kpivalue] of Object.entries(stats)) {
-      //   for (const [type, typevalue] of Object.entries(kpivalue)) {
-      //     const sorted = typevalue.sort((a, b) => (new Date(b.time_value) - new Date(a.time_value)));
-      //     const unique = sorted.filter((item, index, self) => self.findIndex((t) => t.time_value === item.time_value && t.kpi === item.kpi && t.host_name === item.host_name && t.nftype === item.nftype && t.type === item.type) === index);
-      //     stats[kpi][type] = unique;
-      //   }
-      // }
-      const panels = Object.values(stats)?.reduce((acc, curr) => {
-        if (curr['NRD']?.display_type) {
-          if (!acc[curr['NRD'].display_type]) {
-            acc[curr['NRD'].display_type] = [];
-            acc[curr['NRD'].display_type].push({...curr, kpi: curr['NRD'].kpi});
-          } else {
-            acc[curr['NRD'].display_type].push({...curr, kpi: curr['NRD'].kpi});
-          }
-        }
-        return acc;
-      }, {}); 
-      return panels;
-    } else {
-      const panels = Object.values(stats)?.reduce((acc, curr) => {
-        if (!acc[curr.display_type]) {
-          acc[curr.display_type] = [];
-          acc[curr.display_type].push(curr);
-        } else {
-          acc[curr.display_type].push(curr);
-        }
-        return acc;
-      }, {}); 
-      return panels;
-    }
-  }
-
-  const getNodePanels = () => {
-    if (node.nodetype === 'mme') {
-      return [648,649,650,664,719,666,667,665,669,686,668,738,684,687,694,704,685,697,705,707,714,708,706,713,715,720,722,716,709,718,732,712,717,731,743,745,744,746,828]
-    } else if (node.nodetype === 'cscf') {
-      return [3]
-    } else {
-      return [5]
-    }
-  }
-
-  function NameIcons(name) {
-    let formattedName = name;
-    if (!name) {
-      formattedName = 'Default, User';
-    } else if (name === 'Default User') {
-      formattedName = 'Default, User';
-    }
-    let [firstName, lastName] = formattedName.split(', ');
-    let firstLetterFirstName = firstName.charAt(0).toUpperCase();
-    let firstLetterLastName = lastName.charAt(0).toUpperCase();
-  
-    return (
-      <div className="name-icons">
-        <div title={formattedName} className="icon">{firstLetterFirstName}{firstLetterLastName}</div>
-      </div>
-    );
-  }
-
-  const remainingDays = (date) => {
-    if (date) {
-      const currentDate = moment();
-      const deletionDate = moment(date);
-      const diffInDays = deletionDate.diff(currentDate, 'days');
-      return diffInDays;
-    } else {
-      return 7;
+      default:
+        return "#000";
     }
   };
 
-  const handleChartFilterChange = (event, key) => {
-    setChartFilters({
-        ...chartFilters,
-        [key]: moment(event.target.value).format('YYYY-MM-DDTHH:mm:ss')
-    });
-  }
+  const getCellStyle = (priority) => {
+    return {
+      border: "1px solid #e0e0e0",
+      padding: "2px",
+      color: getColorPriority(priority),
+      fontSize: "12px",
+    };
+  };
 
-  const updateGrafana = () => {
-      setFrom(moment(chartFilters.startDateTime).valueOf());
-      setTo(moment(chartFilters.endDateTime).valueOf());
-  }
+  const [selectedFilters, setSelectedFilters] = useState(priorityFilter);
+  const [selectedFilters2, setSelectedFilters2] = useState(nodesData.priorityFilters);
+
+  const handleFilterToggle = (value, e) => {
+    if (selectedFilters.includes(value)) {
+      setSelectedFilters(selectedFilters.filter((filter) => filter !== value));
+      setPriorityFilter(selectedFilters.filter((filter) => filter !== value));
+    } else {
+      setSelectedFilters([...selectedFilters, value]);
+      setPriorityFilter([...selectedFilters, value]);
+    }
+  };
+
+  const handleFilterToggle2 = (value, e) => {
+    if (selectedFilters2.includes(value)) {
+      setSelectedFilters2(selectedFilters2.filter((filter) => filter !== value));
+      dispatch(setPriorityFilter2({filters: selectedFilters2.filter((filter) => filter !== value), current: nodesData}));
+    } else {
+      setSelectedFilters2([...selectedFilters2, value]);
+      dispatch(setPriorityFilter2({filters: [...selectedFilters2, value], current: nodesData}));
+    }
+  };
+
+  useEffect(() => {
+    if (Object.keys(nestInfo).length > 0) {
+      dispatch(setNestData({nest: nestInfo, current: nodesData}));
+    }
+  }, [nestInfo]);
+
+  const layout = () => {
+    if (error) {
+      return (
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "start",
+            alignItems: "center",
+            height: "100vh",
+            flexDirection: "column",
+          }}
+        >
+          <Typography variant="h4" component="h1" align="center">
+            <EngineeringIcon
+              style={{ width: "100px", height: "100px", color: "#d6006e" }}
+            />
+          </Typography>
+          <Typography variant="h4" component="h1" align="center">
+            Site Maintenance In Progress
+          </Typography>
+        </Box>
+      );
+    } else {
+      return (
+        <>
+          {notifications ? (
+            <Notifications />
+          ) : (
+            <>
+              <Grid
+                container
+                direction="row"
+                sx={{
+                  marginBottom: "24px",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Grid item container xs={6}>
+                  <Box sx={{ minWidth: 200, marginRight: "24px" }}>
+                    <FormControl fullWidth>
+                      <InputLabel id="nodetype-label">Tech Type</InputLabel>
+                      <Select
+                        labelid="nodetype-label"
+                        id="teah_type"
+                        value={filters.nodetype}
+                        label="Tech Type"
+                        onChange={(e) => {
+                          setFilters({
+                            ...filters,
+                            nodetype: e?.target?.value,
+                          });
+                        }}
+                      >
+                        {basefilters.nodetype?.sort()?.map((ttype) => (
+                          <MenuItem key={ttype} value={ttype}>
+                            {ttype?.toUpperCase()}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ minWidth: 200, marginRight: "5px" }}>
+                    <FormControl fullWidth>
+                      <InputLabel id="pool-label">Pool</InputLabel>
+                      <Select
+                        labelid="pool-label"
+                        id="pool"
+                        value={filters.pools}
+                        label="Pool"
+                        onChange={(e) => {
+                          setFilters({ ...filters, pools: e?.target?.value });
+                        }}
+                      >
+                        {basefilters.pools?.sort()?.map((pool) => (
+                          <MenuItem key={pool} value={pool}>
+                            {pool?.toUpperCase()}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center" }}>
+                    <IconButton onClick={resetFilters} aria-label="refresh">
+                      <SyncIcon />
+                    </IconButton>
+                  </Box>
+                  <Box sx={{ minWidth: 100, marginRight: "12px" }}>
+                    <FormControl fullWidth>
+                      {/* <InputLabel id="search-label">Search</InputLabel> */}
+                      <TextField
+                        labelid="search-label"
+                        variant="outlined"
+                        label="Search"
+                        value={searchTerm}
+                        onChange={handleChange}
+                        onKeyUp={(e) => {
+                          if (e.key === "Enter") {
+                            handleSubmit(e);
+                          }
+                        }}
+                        sx={{ mr: 1, flex: 1 }}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={handleSubmit}
+                                sx={{ p: "10px" }}
+                                aria-label="search"
+                              >
+                                <SearchIcon />
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </FormControl>
+                  </Box>
+                </Grid>
+
+                <Stack xs={4} direction="row" spacing={10} alignItems="center">
+                  <Box sx={{display: 'flex', flexDirection: 'row', gap: '4px'}}>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <ViewModuleIcon
+                        sx={{ color: !view ? "rgb(214, 0, 110)" : "#000" }}
+                      />
+                      <Typography>
+                        Pool View
+                      </Typography>
+                    </Box>
+                    <FormControlLabel
+                      style={{marginLeft: 0, marginRight: 0}}
+                      control={
+                        <IOSSwitch
+                          sx={{ m: 1 }}
+                          checked={view}
+                          onChange={(e) => {
+                            localStorage.setItem("view", e.target.checked);
+                            setView(e.target.checked);
+                          }}
+                        />
+                      }
+                    />
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <AppsIcon
+                        sx={{ color: view ? "rgb(214, 0, 110)" : "#000" }}
+                      />
+                      <Typography >
+                        Node View
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Box sx={{display: 'flex', flexDirection: 'row', gap: '4px'}}>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <ViewModuleIcon
+                        sx={{ color: !upfView ? "rgb(214, 0, 110)" : "#000" }}
+                      />
+                      <Typography>
+                        Mobility Heatmap
+                      </Typography>
+                    </Box>
+                    <FormControlLabel
+                      style={{marginLeft: 0, marginRight: 0}}
+                      control={
+                        <IOSSwitch
+                          sx={{ m: 1 }}
+                          checked={upfView}
+                          onChange={(e) => {
+                            localStorage.setItem("upf_view", e.target.checked);
+                            toggleUPFView(e.target.checked);
+
+                            // Refresh oor for mobility view
+                            localStorage.setItem('oor', 'false');
+                            toggleOOR(false)
+                          }}
+                        />
+                      }
+                    />
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <AppsIcon
+                        sx={{ color: upfView ? "rgb(214, 0, 110)" : "#000" }}
+                      />
+                      <Typography>
+                        UPF/SMF View
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Stack>
+
+                <Stack direction="row" justifyContent="end" xs={1}>
+                  {dataLoading && (
+                    <Box sx={{ alignItems: "right"}}>
+                      <CircularProgress />
+                    </Box>
+                  )}
+                </Stack>
+              </Grid>
+              <Grid container gap={2} sx={{ marginBottom: "24px" }}>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters.includes("critical")}
+                    onChange={(e) => handleFilterToggle("critical", e)}
+                    sx={{
+                      "& .MuiSvgIcon-root": {
+                        color: "#ff0040",
+                      },
+                      "&.Mui-checked .MuiIconButton-root": {
+                        backgroundColor: "#ff0040",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Critical
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters.includes("major")}
+                    onChange={(e) => handleFilterToggle("major", e)}
+                    sx={{
+                      color: "#f2630a",
+                      "&.Mui-checked": {
+                        color: "#f2630a",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Major
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters.includes("minor")}
+                    onChange={(e) => handleFilterToggle("minor", e)}
+                    sx={{
+                      color: "#ffc33f",
+                      "&.Mui-checked": {
+                        color: "#ffc33f",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Minor
+                  </Typography>
+                </Box>
+                {/* <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters.includes("oor")}
+                    onChange={(e) => {handleFilterToggle("oor", e)
+                      toggleLoader();
+                    }}
+                    sx={{
+                      color: "#0a58ca",
+                      "&.Mui-checked": {
+                        color: "#0a58ca",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    OOR
+                  </Typography>
+                </Box> */}
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters.includes("normal")}
+                    onChange={(e) => handleFilterToggle("normal", e)}
+                    sx={{
+                      color: "#198754",
+                      "&.Mui-checked": {
+                        color: "#198754",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Normal
+                  </Typography>
+                </Box>
+
+                <div className="controls">
+                  <IconButton onClick={handleZoomIn}>
+                    <ZoomInIcon sx={{ color: "#d6006e" }} />
+                  </IconButton>
+                  <IconButton onClick={handleZoomOut}>
+                    <ZoomOutIcon sx={{ color: "#d6006e" }} />
+                  </IconButton>
+
+                  <Typography
+                    sx={{ marginLeft: "4px", color: "#d6006e" }}
+                    variant="body"
+                  >
+                    Use Ctrl +/- for window zoom in and out
+                  </Typography>
+                </div>
+              </Grid>
+              <Grid style={{ transform: `scale(${scale})` }} container>
+                {((!hasFilters && !view) || (hasFilters && !view)) && (
+                  <>
+                    {Object.keys(nodes)
+                      .sort()
+                      .map((region, index) => (
+                        <Region
+                          key={index}
+                          region={region}
+                          nodes={nodes[region]}
+                        />
+                      ))}
+                  </>
+                )}
+
+                {((hasFilters && view) || (!hasFilters && view)) &&
+                  Object.keys(filteredNodes)
+                    .sort()
+                    .map((i, index) => (
+                      <Box
+                        key={index}
+                        style={{
+                          width: "50%",
+                          padding: 0,
+                          margin: 0,
+                          border: "2px solid black",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <NodeGroup
+                          keyProp={index}
+                          nodes={filteredNodes[i]}
+                          group={Object.keys(filters)
+                            .filter((key) => filters[key] !== "All")
+                            .reduce(
+                              (acc, key) => ({ ...acc, [key]: filters[key] }),
+                              {}
+                            )}
+                        />
+                      </Box>
+                    ))}
+              </Grid>
+            </>
+          )}
+        </>
+      );
+    }
+  };
+
+  const layout2 = () => {
+    if (error) {
+      return (
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "start",
+            alignItems: "center",
+            height: "100vh",
+            flexDirection: "column",
+          }}
+        >
+          <Typography variant="h4" component="h1" align="center">
+            <EngineeringIcon
+              style={{ width: "100px", height: "100px", color: "#d6006e" }}
+            />
+          </Typography>
+          <Typography variant="h4" component="h1" align="center">
+            Site Maintenance In Progress
+          </Typography>
+        </Box>
+      );
+    } else {
+      return (
+        <>
+          {notifications ? (
+            <Notifications />
+          ) : (
+            <>
+              <Grid
+                container
+                direction="row"
+                sx={{
+                  marginBottom: "24px",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Grid item container xs={9}>
+                  <Box sx={{ minWidth: 180, marginRight: "12px" }}>
+                    <FormControl fullWidth>
+                      <InputLabel id="nodetype-label">Tech Type</InputLabel>
+                      <Select
+                        labelid="nodetype-label"
+                        id="teah_type"
+                        value={nodesData.filters.nodetype}
+                        label="Tech Type"
+                        onChange={(e) => {
+                          dispatch(setFilters2({ selected: { ...nodesData.filters, nodetype: e?.target?.value }, data: nodesData.data }));
+                        }}
+                      >
+                        {nodesData?.baseFilters?.nodetype?.map((ttype) => (
+                          <MenuItem key={ttype} value={ttype}>
+                            {ttype?.toUpperCase()}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ minWidth: 180, marginRight: "12px" }}>
+                    <FormControl fullWidth>
+                      <InputLabel id="pool-label">Pool</InputLabel>
+                      <Select
+                        labelid="pool-label"
+                        id="pool"
+                        value={nodesData.filters.pools}
+                        label="Pool"
+                        onChange={(e) => {
+                          dispatch(setFilters2({ selected: { ...nodesData.filters, pools: e?.target?.value }, data: nodesData.data }));
+                        }}
+                      >
+                        {nodesData?.baseFilters?.pools?.map((pool) => (
+                          <MenuItem key={pool} value={pool}>
+                            {pool?.toUpperCase()}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ minWidth: 180, marginRight: "12px" }}>
+                    <FormControl fullWidth>
+                      <InputLabel id="market-label">Market</InputLabel>
+                      <Select
+                        labelid="market-label"
+                        id="market"
+                        value={nodesData.filters.markets}
+                        label="Market"
+                        onChange={(e) => {
+                          dispatch(setFilters2({ selected: { ...nodesData.filters, markets: e?.target?.value }, data: nodesData.data }));
+                        }}
+                      >
+                        {nodesData?.baseFilters?.markets?.map((market) => (
+                          <MenuItem key={market} value={market}>
+                            {market?.toUpperCase()}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ minWidth: 180, marginRight: "4px" }}>
+                    <FormControl fullWidth>
+                      <InputLabel id="rack-label">Rack</InputLabel>
+                      <Select
+                        labelid="rack-label"
+                        id="rack"
+                        value={nodesData.filters.racks}
+                        label="Rack"
+                        onChange={(e) => {
+                          dispatch(setFilters2({ selected: { ...nodesData.filters, racks: e?.target?.value }, data: nodesData.data }));
+                        }}
+                      >
+                        {nodesData?.baseFilters?.racks?.map((rack) => (
+                          <MenuItem key={rack} value={rack}>
+                            {rack?.toUpperCase()}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center" }}>
+                    <IconButton onClick={() => { dispatch(resetFilters2(nodesData.data)) }} aria-label="refresh">
+                      <SyncIcon />
+                    </IconButton>
+                  </Box>
+                  <Box sx={{ minWidth: 180, marginRight: "12px" }}>
+                    <FormControl fullWidth>
+                      {/* <InputLabel id="search-label">Search</InputLabel> */}
+                      <TextField
+                        labelid="search-label"
+                        variant="outlined"
+                        label="Search"
+                        value={searchTerm2}
+                        onChange={(e) => {
+                          setSearchTerm2(e?.target?.value)
+                        }}
+                        onKeyUp={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            dispatch(setSearch2({
+                              search: searchTerm2,
+                              selected: nodesData.filters,
+                              data: nodesData.data
+                            }));
+                          }
+                        }}
+                        sx={{ mr: 1, flex: 1 }}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  dispatch(setSearch2({
+                                    search: searchTerm2,
+                                    selected: nodesData.filters,
+                                    data: nodesData.data
+                                  }));
+                                }}
+                                sx={{ p: "10px" }}
+                                aria-label="search"
+                              >
+                                <SearchIcon />
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </FormControl>
+                  </Box>
+                </Grid>
+
+                <Stack xs={2} direction="column"  alignItems="center">
+                  <Box sx={{display: 'flex', flexDirection: 'row', gap: '4px'}}>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <ViewModuleIcon
+                        sx={{ color: !upfView ? "rgb(214, 0, 110)" : "#000" }}
+                      />
+                      <Typography>
+                        Mobility Heatmap
+                      </Typography>
+                    </Box>
+                    <FormControlLabel
+                      style={{marginLeft: 0, marginRight: 0}}
+                      control={
+                        <IOSSwitch
+                          sx={{ m: 1 }}
+                          checked={upfView}
+                          onChange={(e) => {
+                            localStorage.setItem("upf_view", e.target.checked);
+                            toggleUPFView(e.target.checked);
+                          }}
+                        />
+                      }
+                    />
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <AppsIcon
+                        sx={{ color: upfView ? "rgb(214, 0, 110)" : "#000" }}
+                      />
+                      <Typography>
+                        UPF/SMF View
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Stack>
+
+                <Stack direction="row" justifyContent="end" xs={1}>
+                  {nodesData.loading && (
+                    <Box sx={{ alignItems: "right" }}>
+                      <CircularProgress />
+                    </Box>
+                  )}
+                </Stack>
+              </Grid>
+              <Grid container gap={2} sx={{ marginBottom: "24px" }}>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters2.includes("critical")}
+                    onChange={(e) => handleFilterToggle2("critical", e)}
+                    sx={{
+                      "& .MuiSvgIcon-root": {
+                        color: "#ff0040",
+                      },
+                      "&.Mui-checked .MuiIconButton-root": {
+                        backgroundColor: "#ff0040",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Critical
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters2.includes("major")}
+                    onChange={(e) => handleFilterToggle2("major", e)}
+                    sx={{
+                      color: "#f2630a",
+                      "&.Mui-checked": {
+                        color: "#f2630a",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Major
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters2.includes("minor")}
+                    onChange={(e) => handleFilterToggle2("minor", e)}
+                    sx={{
+                      color: "#ffc33f",
+                      "&.Mui-checked": {
+                        color: "#ffc33f",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Minor
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters2.includes("oor")}
+                    onChange={(e) => handleFilterToggle2("oor", e)}
+                    sx={{
+                      color: "#0a58ca",
+                      "&.Mui-checked": {
+                        color: "#0a58ca",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    OOR
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters2.includes("normal")}
+                    onChange={(e) => handleFilterToggle2("normal", e)}
+                    sx={{
+                      color: "#198754",
+                      "&.Mui-checked": {
+                        color: "#198754",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Normal
+                  </Typography>
+                </Box>
+
+                <div className="controls">
+                  <IconButton onClick={handleZoomIn}>
+                    <ZoomInIcon sx={{ color: "#d6006e" }} />
+                  </IconButton>
+                  <IconButton onClick={handleZoomOut}>
+                    <ZoomOutIcon sx={{ color: "#d6006e" }} />
+                  </IconButton>
+
+                  <Typography
+                    sx={{ marginLeft: "4px", color: "#d6006e" }}
+                    variant="body"
+                  >
+                    Use Ctrl +/- for window zoom in and out
+                  </Typography>
+                </div>
+              </Grid>
+              <Grid style={{ transform: `scale(${scale})` }} container>
+                <>
+                  {nodesData.nodes && (Object.keys(nodesData.nodes)
+                    .sort()
+                    .map((region, index) => (
+                      <Region2
+                        key={index}
+                        region={region}
+                        nodes={nodesData.nodes[region]}
+                        stats={nodesData.stats}
+                        nest={nestInfo}
+                      />
+                    )))}
+                </>
+              </Grid>
+            </>
+          )}
+        </>
+      );
+    }
+  };
 
   return (
-    <>
-      <Snackbar
-        anchorOrigin={{ vertical, horizontal }}
-        open={openSnackState}
-        autoHideDuration={3000}
-        onClose={closeSnack}
-        key={vertical + horizontal}
-        style={{ top: 100 }}
-      >
-        <Alert
-          onClose={closeSnack}
-          severity="success"
-          variant="filled"
-          sx={{ width: '100%' }}
-        >
-          {snackMessage}
-        </Alert>
-      </Snackbar>
-      <Card style={{
-        ...style,
-        backgroundColor: bgcolor || getColorPriority(node?.priority),
-        color: color || 'white',
-        cursor: 'context-menu'
-      }} onClick={onClick} onContextMenu={handleContextMenu} >
-        <CardContent style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, paddingBottom: 8, paddingLeft: 5, paddingRight: 5, fontSize: '12px' }}>
-          <Typography onMouseEnter={handlePopoverOpen}
-            onMouseLeave={handlePopoverClose} aria-owns={open ? 'mouse-over-popover' : undefined}
-            aria-haspopup="true"
-            style={{ fontSize: 'inherit', fontWeight: 'inherit', width: 'auto' }} variant="body2">{node?.pool?.toUpperCase() ? (node?.isCombiNode == 1 ? node?.host_name?.toUpperCase() + '(Combi)' : node?.host_name?.toUpperCase())  + '::' + node?.pool?.toUpperCase() : node?.host_name?.toUpperCase()}</Typography>
+    <div style={{ overflowX: "auto", whiteSpace: "nowrap", padding: 20 }}>
+      <React.Fragment>
+        {openSnackState && (
+          <Box
+            sx={{
+              position: "fixed",
+              top: 16,
+              right: 16,
+              zIndex: 1300,
+              maxWidth: 450, // Adjust width as needed
+              borderRadius: 2,
+              boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.1)",
+            }}
+          >
+            <Alert
+              // severity="warning"
+              onClose={closeSnack}
+              severity="warning"
+              icon={false}
+              sx={{
+                bgcolor: "white",
+                overflow: "hidden",
+              }}
+            >
+              {/* <AlertTitle>Important Alerts</AlertTitle> */}
+              <Paper>
+                <Table style={styles.table}>
+                  <TableHead style={styles.tableHead}>
+                    <TableRow>
+                      <TableCell style={styles.tableCell}>Node</TableCell>
+                      <TableCell style={styles.tableCell}>State</TableCell>
+                      <TableCell style={styles.tableCell}>Status</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {alerts
+                      ?.filter((alert) => alert.priority !== "normal")
+                      .map((alert, index) => (
+                        <TableRow key={index}>
+                          <TableCell style={styles.tableCell}>
+                            {alert.host_name}
+                          </TableCell>
+                          <TableCell style={getCellStyle(alert.priority)}>
+                            {alert.priority}
+                          </TableCell>
+                          <TableCell style={styles.tableCell}>
+                            {alert.isNew ? "New" : "Updated"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </Paper>
+            </Alert>
+          </Box>
 
-          {
-            node && node.notes && node.notes.length > 0 && (
-              <CommentIcon style={{ cursor: 'pointer', color: '#000', fontSize: '16px' }} onClick={() => setViewOpenNotes(true)} />
-            )
-          }
-        </CardContent>
-
-        {
-          enableContextMenu && (
-            <>
-              <Menu
-                open={contextMenu !== null}
-                onClose={handleClose}
-                anchorReference="anchorPosition"
-                anchorPosition={
-                  contextMenu !== null
-                    ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
-                    : undefined
-                }
-              >
-                <MenuItem onClick={() => {
-                  window.open(`https://wasp.eng.t-mobile.com/nodeinfo/${node.host_name?.toUpperCase()}`, '_blank');
-                  handleClose();
-                }}><HistoryIcon style={{ marginRight: '8px', color: "#d6006e" }} /> Node Info</MenuItem>
-                <MenuItem onClick={() => { setOpenChart(true); handleClose(); }}><ShowChartIcon style={{ marginRight: '8px', color: "#d6006e" }} />Charts</MenuItem>
-                <MenuItem onClick={() => { setOpenNotes(true); handleClose(); }}><NoteAddIcon style={{ marginRight: '8px', color: "#d6006e" }} />Add Notes</MenuItem>
-              </Menu>
-
-              <Popover
-                id="mouse-over-popover"
-                open={open}
-                anchorEl={anchorEl}
-                anchorOrigin={{
-                  vertical: 'center',
-                  horizontal: 'left',
-                }}
-                transformOrigin={{
-                  vertical: 'top',
-                  horizontal: 'left',
-                }}
-                onClose={handlePopoverClose}
-                disableRestoreFocus
-
-              >
-                <Card onMouseEnter={handleMouseEnterPopover}
-                    onMouseLeave={handleMouseLeavePopover}
-                >
-                  <CardContent style={{ backgroundColor:'#bfab5b',padding:'8px'}}
-                >
-                    {
-                      node?.stats && (
-                        <>
-                          {
-                            !node?.isCombiKpi ? (
-                              <KPIModalContent node={node} data={groupedStats(node?.stats)} />
-                            ) : (
-                              <CombiKPIModalContent node={node} data={groupedStats(node?.stats)} />
-                            )
-                          }
-                        </>
-                      )
-                    }
-                    {
-                      !node?.stats && (
-                        <Typography variant="h6" sx={{ color: '#d6006e' }}>No Data</Typography>
-                      )
-                    }
-                  </CardContent>
-                </Card>
-              </Popover>
-              <Modal
-                open={openChart}
-                onClose={() => { setOpenChart(false); }}
-                aria-labelledby="chart-modal-title"
-                aria-describedby="chart-modal-description"
-              >
-                <Box sx={modal}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', color: '#d6006e' }}>
-                    <Typography id="chart-modal-title" variant="h6" component="h2">
-                      {node.host_name?.toUpperCase() + '::' + node.pool} - KPI Chart
-                    </Typography>
-
-                    <IconButton sx={{ color: '#d6006e' }} onClick={() => { setOpenChart(false); }}><CloseIcon /></IconButton>
-                  </Box>
-                  <Box sx={{ marginTop: 2, marginBottom: 2, display: 'flex', alignItems: 'center' }}>
-                    <TextField
-                      label="Start Date"
-                      type="datetime-local"
-                      value={chartFilters.startDateTime ? moment(chartFilters.startDateTime).format('YYYY-MM-DDTHH:mm:ss') : ''}
-                      onChange={(event) => handleChartFilterChange(event, 'startDateTime')}
-                      sx={{ marginRight: 1 }}
-                    />
-                    <TextField
-                      label="End Date"
-                      type="datetime-local"
-                      value={chartFilters.endDateTime ? moment(chartFilters.endDateTime).format('YYYY-MM-DDTHH:mm:ss') : ''}
-                      onChange={(event) => handleChartFilterChange(event, 'endDateTime')}
-                      sx={{ marginRight: 1 }}
-                    />
-                    <Button variant="contained" color="primary" onClick={updateGrafana}>Update Chart</Button>
-                  </Box>
-                  {from && to &&
-                    <iframe
-                      src={`https://grafana.tools.nsds.t-mobile.com/d-solo/ZB5uWsLMk/national-heatmap?orgId=1&var-measurement=${node?.nodetype}&var-poolname=${node?.pool}&var-nodename=${node?.host_name}&from=${from}&to=${to}&panelId=${node?.nodetype === 'nrf' ? 85 : 833}&theme=light`}
-                      style={{ width: '100%', height: '350px', border: 'none' }}
-                      frameBorder="0"
-                    ></iframe>
-                    // <Grid container rowSpacing={1} columnSpacing={{ xs: 1, sm: 2, md: 3 }}>
-                    //   {/* <Typography>{getNodePanels()}</Typography> */}
-                    //   {getNodePanels().map(panel => 
-                    //     (
-                    //       <Grid item xs={6}>
-                    //         <iframe
-                    //           src={`https://grafana.tools.nsds.t-mobile.com/d-solo/ZB5uWsLMk/national-heatmap?orgId=1&var-measurement=${node?.nodetype}&var-poolname=${node?.pool}&var-nodename=${node?.host_name}&from=${from}&to=${to}&panelId=${panel}&theme=light`}
-                    //           style={{ width: '100%', height: '350px', border: 'none' }}
-                    //           frameBorder="0"
-                    //         ></iframe>
-                    //       </Grid>
-                    //     )
-                    //   )}
-                    // </Grid> 
-                  }
-                </Box>
-              </Modal>
-              <Modal
-                open={openNotes}
-                onClose={() => { setOpenNotes(false); }}
-                aria-labelledby="notes-modal-title"
-                aria-describedby="notes-modal-description"
-              >
-                <Box sx={modalNotes}>
-                  <Typography sx={{ color: '#d6006e' }} id="notes-modal-title" variant="h6" component="h2">
-                    Add Notes for {node.host_name?.toUpperCase()}
-                  </Typography>
-                  <Input id="notes" aria-describedby="notes" label="Notes" multiline sx={{ width: '100%', marginBottom: '16px' }} onChange={(e) => { setNote(e.target.value) }} fullWidth />
-                  <FormControl sx={{ marginTop: '8px', width: '32%' }}>
-                      <InputLabel id="auto-delete-label">Auto Delete</InputLabel>
-                      <Select
-                          labelId="auto-delete-label"
-                          id="auto-delete"
-                          value={autoDelete}
-                          onChange={(e) => setAutoDelete(e.target.value)}
-                      >
-                          <MenuItem value={1}>1 day</MenuItem>
-                          <MenuItem value={2}>2 days</MenuItem>
-                          <MenuItem value={3}>3 days</MenuItem>
-                          <MenuItem value={4}>4 days</MenuItem>
-                          <MenuItem value={5}>5 days</MenuItem>
-                          <MenuItem value={6}>6 days</MenuItem>
-                          <MenuItem value={7}>7 days</MenuItem>
-                      </Select>
-                  </FormControl>
-                  <Button sx={{ marginTop: '8px', marginLeft: '8px', height: '56px', width: '32%' }} variant="contained" onClick={() => { saveNote() }}>Submit</Button>
-                  <Button sx={{ marginTop: '8px', marginLeft: '8px', height: '56px', width: '32%' }} variant="outlined" onClick={() => { setOpenNotes(false); }}>Cancel</Button>
-                </Box>
-              </Modal>
-              <Modal
-                open={confirmModal}
-                onClose={() => { setConfirmModal(false); }}
-                aria-labelledby="notes-confirm-modal-title"
-                aria-describedby="notes-confirm-modal-description"
-              >
-                <Box sx={modalNotes}>
-                  <Typography sx={{ color: '#d6006e' }} id="notes-confirm-modal-title" variant="h6" component="h2">
-                    Confirm deleting the Note!
-                  </Typography>
-                  <Button sx={{ marginTop: '8px' }} variant="contained" onClick={() => { deleteNote(curr); }}>Confirm</Button>
-                  <Button sx={{ marginTop: '8px', marginLeft: '8px' }} variant="outlined" onClick={() => { setConfirmModal(false); }}>Cancel</Button>
-                </Box>
-              </Modal>
-              <Modal
-                open={openViewNotes}
-                onClose={() => { setViewOpenNotes(false); }}
-                aria-labelledby="notes-modal-title"
-                aria-describedby="notes-modal-description"
-              >
-                <Box sx={modalNotes}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-                    <Typography sx={{ color: '#d6006e' }} id="notes-modal-title" variant="h6" component="h2">
-                      {node.host_name?.toUpperCase()} Notes
-                    </Typography>
-                    <IconButton sx={{ color: '#d6006e' }} onClick={() => { setViewOpenNotes(false); }}><CloseIcon /></IconButton>
-                  </div>
-                  {
-                    node && node.notes && (
-                      node.notes.map((note, index) => (
-                        <div style={{ margin: '8px 0', border: '1px solid #d6006e', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', }} key={index}>
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            {NameIcons(note?.updated_by)}
-                            <Box>
-                              <Typography sx={{ fontSize: '24px' }} id="notes-modal-title" variant="body">
-                                {note.notes}
-                              </Typography>
-                              <Typography sx={{ fontSize: '12px' }}>{new Date(note.updated_at).toLocaleDateString()}</Typography>
-                            </Box>
-                          </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <AutoDeleteIcon sx={{marginRight: '8px'}}/>{remainingDays(note?.expires_at) + 1}
-                            <IconButton sx={{ color: '#d6006e', marginLeft: '8px' }} onClick={() => { setCurr(note); setConfirmModal(true); }}><DeleteIcon /></IconButton>
-                          </Box>
-                        </div>
-                      ))
-                    )
-                  }
-                </Box>
-              </Modal>
-            </>
-          )
-        }
-      </Card>
-    </>
+        )}
+      </React.Fragment>
+      {upfView ? layout2() : layout()}
+    </div>
   );
 };
 
-export default Node;
+export default DashBoard;
