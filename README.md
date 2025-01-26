@@ -1,35 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, Typography, Grid, Popover, IconButton } from '@mui/material';
+import { Card, CardContent, Typography, Grid, Popover } from '@mui/material';
 import KPIModalContent2 from './KPIModalContent2';
-import Rack from './Rack';
 import Node2 from './Node2';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
 const timeZone = 'UTC';
 
-const Market = React.memo(({ market, nodes, setExpandContainer, stats, nest }) => {
+const Rack = React.memo(({ rack, nodes, setExpandMarketContainer, stats, nest }) => {
     const [expanded, setExpanded] = useState(false);
-    const [showMarket, setShowMarket] = useState(false);
-    const [expandMarketContainer, setExpandMarketContainer] = useState(false);
+    const [showRack, setShowRack] = useState(false);
     const [anchorEl, setAnchorEl] = React.useState(null);
     const [mouseIsOver, setMouseIsOver] = useState(false);
 
     const containerStyle = {
         display: 'inline-block',
         verticalAlign: 'top',
-        width: expandMarketContainer ? '100%' : 'auto',
+        width: 'auto',
         transition: 'width 0.3s',
         minWidth: '32.85%'
     };
 
     useEffect(() => {
         if (expanded) {
-            setShowMarket(false);
-            setExpandContainer(true);
+            setShowRack(false);
             setExpandMarketContainer(true);
         } else {
-            setShowMarket(true);
-            setExpandContainer(false);
+            setShowRack(true);
             setExpandMarketContainer(false);
         }
     }, [expanded])
@@ -37,30 +32,31 @@ const Market = React.memo(({ market, nodes, setExpandContainer, stats, nest }) =
     const handlePopoverOpen = (event) => {
         const target = event.currentTarget;
         setAnchorEl(target);
-    };
-
-    const handlePopoverClose = () => {
+      };
+    
+      const handlePopoverClose = () => {
         setTimeout(() => {
-            if (!mouseIsOver) {
-                setAnchorEl(null);
-            }
+          if (!mouseIsOver) {
+            setAnchorEl(null);
+          }
         })
-    };
-
-    const handleMouseEnterPopover = () => {
+      };
+    
+      const handleMouseEnterPopover = () => {
         setMouseIsOver(true);
-    };
-
-    const handleMouseLeavePopover = () => {
+      };
+    
+      const handleMouseLeavePopover = () => {
         setMouseIsOver(false);
         setAnchorEl(null);
-    };
+      };
+    
+      const open = Boolean(anchorEl);
 
-    const open = Boolean(anchorEl);
 
     const getColorPriority = () => {
-        if (stats[market] && stats[market].length) {
-            const pr = stats[market].map(_ => _.priority)
+        if (stats[rack] && stats[rack].length) {
+            const pr = stats[rack].map(_ => _.priority)
             const priority = [...new Set(pr)];
             if (priority.length > 0) {
                 if (priority.indexOf('critical') !== -1) {
@@ -82,43 +78,10 @@ const Market = React.memo(({ market, nodes, setExpandContainer, stats, nest }) =
         return 'rgb(128, 128, 128)';
     }
 
-    const mapData = () => {
-
-        return (<>
-            {
-                Object.keys(nodes)?.map((rack, index) => {
-                    if (rack === 'SMFRACK') {
-                        return (nodes[rack]?.map((node, index) => (
-                            <Node2 style={{
-                                minWidth: '32.45%',
-                                minHeight: 72,
-                                margin: '4px',
-                                border: '1px solid black',
-                                borderRadius: '6px'
-
-                            }} key={index} node={node} stats={stats} variation={'h6'} nest={nest} />
-                        )))
-                    } else {
-                        return (
-                            <Rack
-                                key={index}
-                                rack={rack}
-                                nodes={nodes[rack]}
-                                setExpandMarketContainer={setExpandMarketContainer}
-                                stats={stats}
-                                nest={nest}
-                            />
-                        )
-                    }
-                })
-            }
-        </>)
-    }
-
     return (
         <div style={containerStyle}>
             {
-                showMarket && (
+                showRack && (
                     <>
                         <Card
                             style={{
@@ -138,13 +101,13 @@ const Market = React.memo(({ market, nodes, setExpandContainer, stats, nest }) =
                             }}>
                                 <Typography 
                                     onMouseEnter={handlePopoverOpen}
-                                    onMouseLeave={handlePopoverClose} aria-owns={open ? 'mouse-over-marketpopover' : undefined}
+                                    onMouseLeave={handlePopoverClose} aria-owns={open ? 'mouse-over-rackpopover' : undefined}
                                     aria-haspopup="true" 
-                                    sx={{ width: 'auto', display: 'inline-block' }} variant="h6">{`MKT::${market}`}</Typography>
+                                    sx={{ width: 'auto', display: 'inline-block' }} variant="h6">{`RCK::${rack}`}</Typography>
                             </CardContent>
 
                             <Popover
-                                id="mouse-over-marketpopover"
+                                id="mouse-over-rackpopover"
                                 open={open}
                                 anchorEl={anchorEl}
                                 anchorOrigin={{
@@ -165,8 +128,13 @@ const Market = React.memo(({ market, nodes, setExpandContainer, stats, nest }) =
                                     <CardContent style={{ backgroundColor: '#bfab5b',padding:'8px' }}
                                     >
                                         {
-                                            stats[market] && (
-                                                <KPIModalContent2 node={market} data={stats[market]} nest={nest} hideNest={true} />
+                                            stats[rack] && (
+                                                <KPIModalContent2 node={rack} data={stats[rack]} nest={nest} hideNest={true}/>
+                                            )
+                                        }
+                                        {
+                                            !stats[rack] && (
+                                                <Typography variant="h6" sx={{ color: '#d6006e' }}>No Data</Typography>
                                             )
                                         }
                                     </CardContent>
@@ -181,36 +149,31 @@ const Market = React.memo(({ market, nodes, setExpandContainer, stats, nest }) =
                 <Card style={{
                     border: '2px solid black',
                     margin: '4px',
-                    backgroundColor: expanded ? '#f2d8d8' : 'none',
+                    backgroundColor: expanded ? '#e3edd3' : 'none'
                 }}>
                     <CardContent>
                         <Grid container spacing={1}>
                             {
-                                !showMarket && (
-                                    <Card
+                                !showRack && (
+                                    <Node2
                                         style={{
-                                            border: '2px solid black',
-                                            margin: '4px',
-                                            backgroundColor: 'lightgray',
-                                            color: 'black',
-                                            width: '32.4%',
-                                            maxHeight: 76
-                                        }}
-                                        onClick={(e) => {
-                                            setExpanded(!expanded)
-                                        }}
-                                    >
-                                        <CardContent style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center'
-                                        }}>
-                                            <Typography sx={{ width: 'auto', display: 'inline-block', fontSize: '1rem' }} variant="h6"><IconButton><ArrowBackIcon style={{ marginRight: '8px' }} /></IconButton>{market}</Typography>
-                                        </CardContent>
-                                    </Card>
+                                            backgroundColor: 'lightgray', minWidth: '32.85%', minHeight: 35,
+                                            border: '1px solid black',
+                                            borderRadius: 0,
+                                            margin: '1px'
+                                        }} key={rack} node={{ host_name: rack }} color={'black'} bgcolor={'lightgray'} onClick={() => setExpanded(!expanded)} enableContextMenu={false} />
                                 )
                             }
-                            {mapData()}
+                            {nodes.length && (
+                                nodes?.map((node, index) => (
+                                    <Node2 style={{
+                                        minWidth: '32.85%', minHeight: 35,
+                                        border: '1px solid black',
+                                        borderRadius: 0,
+                                        margin: '1px'
+                                    }} key={index} node={node} stats={stats} nest={nest} />
+                                ))
+                            )}
                         </Grid>
                     </CardContent>
                 </Card>
@@ -219,4 +182,4 @@ const Market = React.memo(({ market, nodes, setExpandContainer, stats, nest }) =
     );
 });
 
-export default Market;
+export default Rack;
