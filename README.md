@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useSelector } from "react-redux";
 import { Card, CardContent, Typography, Grid, Popover, Table, TableHead, TableBody, TableRow, TableCell, Box, Modal, IconButton, TextField, Button } from '@mui/material';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import CloseIcon from '@mui/icons-material/Close';
 import SsidChartIcon from '@mui/icons-material/SsidChart';
-import Node from './Node';
-import sort_by from '../utils';
+import Market from './Market';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import moment from 'moment-timezone';
 
 const timeZone = 'UTC';
@@ -24,11 +25,15 @@ const modal = {
     overflowY: 'auto',
 };
 
-const Region = ({ region, nodes }) => {
-    const currentDate = moment().tz(timeZone);
-    const [openChart, setOpenChart] = useState(false);
+const Region2 = ({ region, nodes, nest }) => {
+    const { stats, priorityData } = useSelector((state) => state.nodes);
     const [expanded, setExpanded] = useState(false);
     const [showRegion, setShowRegion] = useState(false);
+    const [expandContainer, setExpandContainer] = useState(false);
+
+    //Chart & Health
+    const currentDate = moment().tz(timeZone);
+    const [openChart, setOpenChart] = useState(false);
     const [health, setHealth] = useState({
         health: 'normal',
         nodes: 0,
@@ -39,24 +44,10 @@ const Region = ({ region, nodes }) => {
         backgroundColor: '#198754'
     });
 
-    const [anchorEl, setAnchorEl] = React.useState(null);
     const [healthEl, setHealthEl] = React.useState(null);
-    const [chartFilters, setChartFilters] = React.useState({startDateTime: moment.tz(timeZone).subtract(24, 'hours').format('YYYY-MM-DDTHH:mm:ss'), endDateTime:  currentDate.format('YYYY-MM-DDTHH:mm:ss')});
+    const [chartFilters, setChartFilters] = React.useState({ startDateTime: moment.tz(timeZone).subtract(24, 'hours').format('YYYY-MM-DDTHH:mm:ss'), endDateTime: currentDate.format('YYYY-MM-DDTHH:mm:ss') });
     const [from, setFrom] = useState(moment(chartFilters.startDateTime).valueOf());
     const [to, setTo] = useState(moment(chartFilters.endDateTime).valueOf());
-
-    const handlePopoverOpen = (event) => {
-        if (nodes.filter(_ => _.priority && _.priority !== 'normal' && _.priority !== 'oor').length === 0) {
-            return
-        }
-        setAnchorEl(event.currentTarget);
-    };
-
-    const handlePopoverClose = () => {
-        setAnchorEl(null);
-    };
-
-    const open = Boolean(anchorEl);
 
     const handleHealthPopoverOpen = (event) => {
         setHealthEl(event.currentTarget);
@@ -68,29 +59,36 @@ const Region = ({ region, nodes }) => {
 
     const healthOpen = Boolean(healthEl);
 
-    const containerStyle = {
-        display: 'inline-block',
-        verticalAlign: 'top',
-        width: '25%',
-        transition: 'width 0.3s',
-    };
-
-    useEffect(() => {
-        if (expanded) {
-            setShowRegion(false);
-        } else {
-            setShowRegion(true);
-        }
-    }, [expanded])
-
     const getPoolHealth = () => {
-        const pr = nodes.map(node => node.priority);
-        const total = nodes.length;
-        const criticals = pr.filter(_ => _ === 'critical')?.length;
-        const major = pr.filter(_ => _ === 'major')?.length;
-        const minor = pr.filter(_ => _ === 'minor')?.length;
-        const oor = pr.filter(_ => _ === 'oor')?.length;
-        const normal = pr.filter(_ => _ === 'normal')?.length;
+        const markets = Object.keys(nodes);
+        const mprio = markets.map(_ => priorityData[_]).filter(_ => _)
+        const racks = markets.reduce((acc, curr) => {
+            const temp = acc
+            acc = [...temp, ...Object.keys(nodes[curr])]
+            return acc
+        }, [])
+        const rprio = racks.map(_ => priorityData[_]).filter(_ => _)
+        const _nodes = []
+
+        markets.forEach((market) => {
+            racks.forEach((rack) => {
+                if (nodes[market][rack] && nodes[market][rack].length) {
+                    nodes[market][rack].forEach(_ => {
+                        if (_.host_name)
+                            _nodes.push(_.host_name)
+                    })
+                }
+            })
+        })
+
+        const nprio = _nodes.map(_ => priorityData[_]).filter(_ => _)
+
+        const total = mprio.length + rprio.length + nprio.length;
+        const criticals = mprio.filter(_ => _ === 'critical')?.length + rprio.filter(_ => _ === 'critical')?.length + nprio.filter(_ => _ === 'critical')?.length;
+        const major = mprio.filter(_ => _ === 'major')?.length + rprio.filter(_ => _ === 'major')?.length + nprio.filter(_ => _ === 'major')?.length;
+        const minor = mprio.filter(_ => _ === 'minor')?.length + rprio.filter(_ => _ === 'minor')?.length + nprio.filter(_ => _ === 'minor')?.length;
+        const normal = mprio.filter(_ => _ === 'normal')?.length + rprio.filter(_ => _ === 'normal')?.length + nprio.filter(_ => _ === 'normal')?.length;
+        const oor = mprio.filter(_ => _ === 'oor')?.length + rprio.filter(_ => _ === 'oor')?.length + nprio.filter(_ => _ === 'oor')?.length;
         let health = 'normal';
         let background = '#198754';
 
@@ -100,7 +98,7 @@ const Region = ({ region, nodes }) => {
             const mipr = Math.round((minor / total) * 100);
             const ovr = Math.round(((criticals + major) / total) * 100);
 
-;           if (cpr >= 20) {
+            ; if (cpr >= 20) {
                 health = 'critical';
                 background = '#ff0040';
             } else if (mpr >= 20) {
@@ -125,32 +123,6 @@ const Region = ({ region, nodes }) => {
             normal,
             background
         });
-    }
-
-    useEffect(() => {
-        getPoolHealth();
-    }, [nodes]);
-
-    const getColorPriority = () => {
-        const pr = nodes.map(node => node.priority)
-        const priority = [...new Set(pr)];
-        if (priority.length > 0) {
-            if (priority.indexOf('critical') !== -1) {
-                return '#ff0040';
-            } else if (priority.indexOf('major') !== -1) {
-                return '#f2630a';
-            } else if (priority.indexOf('minor') !== -1) {
-                return '#ffc33f';
-            } else if (priority.indexOf('normal') !== -1) {
-                return '#198754';
-            } else if (priority.indexOf('oor') !== -1) {
-                return '#198754';
-            } else {
-                return 'darkgray';
-            }
-        } else {
-            return 'rgb(128, 128, 128)';
-        }
     }
 
     const getHealthColor = () => {
@@ -181,6 +153,58 @@ const Region = ({ region, nodes }) => {
         setTo(moment(chartFilters.endDateTime).valueOf());
     }
 
+    useEffect(() => {
+        if (Object.keys(priorityData)?.length > 0)
+            getPoolHealth();
+    }, [priorityData]);
+
+
+    const containerStyle = {
+        display: 'inline-block',
+        verticalAlign: 'top',
+        width: expandContainer ? '75%' : '25%',
+        transition: 'width 0.3s',
+    };
+
+    useEffect(() => {
+        if (expanded) {
+            setShowRegion(false);
+        } else {
+            setShowRegion(true);
+        }
+    }, [expanded])
+
+    const getColorPriority = () => {
+        if (stats) {
+            const markets = Object.keys(nodes);
+            let _nodes = [];
+
+            markets.forEach(mar => {
+                if (stats[mar]?.length > 0)
+                    _nodes = [...stats[mar]];
+            })
+            const pr = _nodes?.map(node => node.priority)
+            const priority = [...new Set(pr)];
+            if (priority.length > 0) {
+                if (priority.indexOf('critical') !== -1) {
+                    return '#ff0040';
+                } else if (priority.indexOf('major') !== -1) {
+                    return '#f2630a';
+                } else if (priority.indexOf('minor') !== -1) {
+                    return '#ffc33f';
+                } else if (priority.indexOf('normal') !== -1) {
+                    return '#198754';
+                } else if (priority.indexOf('oor') !== -1) {
+                    return '#198754';
+                } else {
+                    return 'darkgray';
+                }
+            }
+        }
+
+        return 'rgb(128, 128, 128)';
+    }
+
     return (
         <div style={containerStyle}>
             {
@@ -190,12 +214,10 @@ const Region = ({ region, nodes }) => {
                             style={{
                                 border: '2px solid black',
                                 margin: '4px',
-                                backgroundColor: health?.background || getColorPriority(),
+                                backgroundColor: health.background || 'rgb(128, 128, 128)',
                                 color: 'white',
                             }}
                             onClick={(e) => {
-                                e.stopPropagation();
-                                setAnchorEl(null);
                                 setExpanded(!expanded)
                             }}
                         >
@@ -204,12 +226,9 @@ const Region = ({ region, nodes }) => {
                                 justifyContent: 'space-between',
                                 alignItems: 'center'
                             }}>
-                                <Typography sx={{ width: 'auto', display: 'inline-block' }} aria-owns={open ? 'mouse-over-popover' : undefined}
-                                    aria-haspopup="true"
-                                    onMouseEnter={handlePopoverOpen}
-                                    onMouseLeave={handlePopoverClose} variant="h6">{region}</Typography>
+                                <Typography sx={{ width: 'auto', display: 'inline-block' }} variant="h6">{region}</Typography>
                                 <Box>
-                                    <SsidChartIcon style={{marginRight: '8px'}} onClick={() => setOpenChart(true)} />
+                                    <SsidChartIcon style={{ marginRight: '8px' }} onClick={() => setOpenChart(true)} />
                                     <MonitorHeartIcon aria-owns={healthOpen ? 'health-popover' : undefined}
                                         aria-haspopup="true" onMouseEnter={handleHealthPopoverOpen}
                                         onMouseLeave={handleHealthPopoverClose} style={{
@@ -218,39 +237,6 @@ const Region = ({ region, nodes }) => {
                                 </Box>
                             </CardContent>
                         </Card>
-                        <Popover
-                            id="mouse-over-popover"
-                            sx={{
-                                pointerEvents: 'none'
-                            }}
-                            open={open}
-                            anchorEl={anchorEl}
-                            anchorOrigin={{
-                                vertical: 'bottom',
-                                horizontal: 'left',
-                            }}
-                            transformOrigin={{
-                                vertical: 'top',
-                                horizontal: 'left',
-                            }}
-                            onClose={handlePopoverClose}
-                            disableRestoreFocus
-                        >
-                            <Card>
-                                <CardContent>
-                                    <Grid container>
-                                        {nodes.filter(_ => _.priority && _.priority !== 'normal' && _.priority !== 'oor').map((node, index) => (
-                                            <Node style={{
-                                                minWidth: '32.85%', minHeight: 60,
-                                                border: '1px solid black',
-                                                borderRadius: 0,
-                                                margin: '1px',
-                                            }} key={index} node={node} />
-                                        ))}
-                                    </Grid>
-                                </CardContent>
-                            </Card>
-                        </Popover>
                         <Popover
                             id="health-popover"
                             sx={{
@@ -280,7 +266,7 @@ const Region = ({ region, nodes }) => {
                                         <TableHead>
                                             <TableRow>
                                                 <TableCell>
-                                                    Nodes
+                                                    Markets/Racks/Nodes
                                                 </TableCell>
                                                 <TableCell>
                                                     Count
@@ -346,28 +332,48 @@ const Region = ({ region, nodes }) => {
                         <Grid container spacing={1}>
                             {
                                 !showRegion && (
-                                    <Node
+                                    <Card
                                         style={{
-                                        backgroundColor: 'lightgray', minWidth: '32.85%', minHeight: 35,
-                                        border: '1px solid black',
-                                        borderRadius: 0,
-                                        margin: '1px'
-                                    }} key={region} node={{ host_name: region }} color={'black'} bgcolor={'lightgray'} onClick={() => setExpanded(!expanded)} enableContextMenu={false} />
+                                            border: '2px solid black',
+                                            margin: '4px',
+                                            backgroundColor: 'lightgray',
+                                            color: 'black',
+                                            width: '32.4%',
+                                            maxHeight: 72
+                                        }}
+                                        onClick={(e) => {
+                                            setExpanded(!expanded)
+                                            setExpandContainer(false)
+                                        }}
+                                    >
+                                        <CardContent style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center'
+                                        }}>
+                                            <Typography sx={{ width: 'auto', display: 'inline-block', fontSize: '1rem' }} variant="h6"><IconButton><ArrowBackIcon style={{ marginRight: '8px' }} /></IconButton>{region}</Typography>
+                                        </CardContent>
+                                    </Card>
                                 )
                             }
-                            {nodes?.sort(sort_by('host_name', false, (a) => a.toUpperCase()))?.map((node, index) => (
-                                <Node style={{
-                                    minWidth: '32.85%', minHeight: 35,
-                                    border: '1px solid black',
-                                    borderRadius: 0,
-                                    margin: '1px'
-                                }} key={index} node={node} />
-                            ))}
+                            {<>
+                                {Object.keys(nodes)
+                                    .sort()
+                                    .map((market, index) => (
+                                        <Market
+                                            key={index}
+                                            market={market}
+                                            nodes={nodes[market]}
+                                            setExpandContainer={setExpandContainer}
+                                            stats={stats}
+                                            nest={nest}
+                                        />
+                                    ))}
+                            </>}
                         </Grid>
                     </CardContent>
                 </Card>
             )}
-
             <Modal
                 open={openChart}
                 onClose={() => { setOpenChart(false); }}
@@ -375,13 +381,13 @@ const Region = ({ region, nodes }) => {
                 aria-describedby="chart-modal-description"
             >
                 <Box sx={modal}>
-                    <Box sx={{display: 'flex', justifyContent: 'space-between', color: '#d6006e'}}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', color: '#d6006e' }}>
                         <Typography id="chart-modal-filters" variant="h6" component="h4">
                             Filters
                         </Typography>
                         <IconButton sx={{ color: '#d6006e' }} onClick={() => { setOpenChart(false); }}><CloseIcon /></IconButton>
                     </Box>
-                    <Box sx={{ display: 'flex', gap: 2, marginY: 2}}>
+                    <Box sx={{ display: 'flex', gap: 2, marginY: 2 }}>
                         <TextField
                             variant="outlined"
                             label="Start Date Time"
@@ -405,16 +411,16 @@ const Region = ({ region, nodes }) => {
                     </Box>
                     {from && to &&
                         <Box>
-                            <iframe 
-                                src={`https://grafana.tools.nsds.t-mobile.com/d-solo/ZB5uWsLMk/national-heatmap?orgId=1&var-measurement=mme&var-poolname=${region}&from=${from}&to=${to}&theme=light&panelId=48`} 
-                                width="100%" 
-                                height="350" 
+                            <iframe
+                                src={`https://grafana.tools.nsds.t-mobile.com/d-solo/ZB5uWsLMk/national-heatmap?orgId=1&var-measurement=mme&var-poolname=${region}&from=${from}&to=${to}&theme=light&panelId=48`}
+                                width="100%"
+                                height="350"
                                 frameborder="0">
                             </iframe>
-                            <iframe 
-                                src={`https://grafana.tools.nsds.t-mobile.com/d-solo/ZB5uWsLMk/national-heatmap?orgId=1&var-measurement=mme&var-poolname=${region}&from=${from}&to=${to}&theme=light&panelId=831`} 
-                                width="100%" 
-                                height="350" 
+                            <iframe
+                                src={`https://grafana.tools.nsds.t-mobile.com/d-solo/ZB5uWsLMk/national-heatmap?orgId=1&var-measurement=mme&var-poolname=${region}&from=${from}&to=${to}&theme=light&panelId=831`}
+                                width="100%"
+                                height="350"
                                 frameborder="0">
                             </iframe>
                         </Box>
@@ -425,4 +431,4 @@ const Region = ({ region, nodes }) => {
     );
 };
 
-export default Region;
+export default Region2;
