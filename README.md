@@ -1,142 +1,222 @@
-import React, { useContext, useEffect, useState } from "react";
-import { useSelector, useDispatch } from "react-redux";
-import {
-    setFilters as setFilters2,
-    setPriorityFilter as setPriorityFilter2,
-    setNestData,
-} from "../reducers/nodeSlice";
-import {
-    CircularProgress,
-    Grid,
-    Box,
-    Checkbox,
-    Typography,
-    FormControl,
-    InputLabel,
-    MenuItem,
-    Select,
-    IconButton,
-} from "@mui/material";
-import { NodeContext } from "../NodeContext";
-import Region from "./Region";
-import Region2 from "./Region2";
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, Typography, Grid, Popover, IconButton } from '@mui/material';
+import KPIModalContent2 from './KPIModalContent2';
+import Rack from './Rack';
+import Node2 from './Node2';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
-const Dashboard = () => {
-    const dispatch = useDispatch();
-    const nodesData = useSelector((state) => state.nodes); // Redux state
-    const {
-        nodes,
-        filteredNodes,
-        filters,
-        basefilters,
-        setFilters,
-        resetFilters,
-        priorityFilter,
-        setPriorityFilter,
-        upfView, // Toggle for UPF view
-    } = useContext(NodeContext); // Access NodeContext
+const timeZone = 'UTC';
 
-    const [selectedFilters, setSelectedFilters] = useState(priorityFilter); // Context filters
-    const [selectedFilters2, setSelectedFilters2] = useState(nodesData.priorityFilters); // Redux filters
+const Market = React.memo(({ market, nodes, setExpandContainer, stats, nest }) => {
+    const [expanded, setExpanded] = useState(false);
+    const [showMarket, setShowMarket] = useState(false);
+    const [expandMarketContainer, setExpandMarketContainer] = useState(false);
+    const [anchorEl, setAnchorEl] = React.useState(null);
+    const [mouseIsOver, setMouseIsOver] = useState(false);
+
+    const containerStyle = {
+        display: 'inline-block',
+        verticalAlign: 'top',
+        width: expandMarketContainer ? '100%' : 'auto',
+        transition: 'width 0.3s',
+        minWidth: '32.85%'
+    };
 
     useEffect(() => {
-        setSelectedFilters(priorityFilter); // Sync context filters
-    }, [priorityFilter]);
-
-    useEffect(() => {
-        setSelectedFilters2(nodesData.priorityFilters); // Sync Redux filters
-    }, [nodesData.priorityFilters]);
-
-    /**
-     * Handle filter toggle for mobility view (context-based).
-     * @param {string} value - The priority to toggle.
-     */
-    const handleFilterToggle = (value) => {
-        const updatedFilters = selectedFilters.includes(value)
-            ? selectedFilters.filter((filter) => filter !== value)
-            : [...selectedFilters, value];
-
-        setSelectedFilters(updatedFilters);
-        setPriorityFilter(updatedFilters); // Update NodeContext
-    };
-
-    /**
-     * Handle filter toggle for UPF view (Redux-based).
-     * @param {string} value - The priority to toggle.
-     */
-    const handleFilterToggle2 = (value) => {
-        const updatedFilters = selectedFilters2.includes(value)
-            ? selectedFilters2.filter((filter) => filter !== value)
-            : [...selectedFilters2, value];
-
-        setSelectedFilters2(updatedFilters);
-        dispatch(setPriorityFilter2({ filters: updatedFilters, current: nodesData })); // Update Redux
-    };
-
-    /**
-     * Render filters for mobility or UPF view.
-     */
-    const renderFilters = () => {
-        const handleToggle = upfView ? handleFilterToggle2 : handleFilterToggle;
-        const activeFilters = upfView ? selectedFilters2 : selectedFilters;
-
-        return (
-            <Grid container spacing={2} sx={{ marginBottom: "24px" }}>
-                {["critical", "major", "minor", "normal"].map((priority) => (
-                    <Box sx={{ display: "flex", alignItems: "center" }} key={priority}>
-                        <Checkbox
-                            checked={activeFilters.includes(priority)}
-                            onChange={() => handleToggle(priority)}
-                        />
-                        <Typography sx={{ marginLeft: "4px" }}>{priority.toUpperCase()}</Typography>
-                    </Box>
-                ))}
-            </Grid>
-        );
-    };
-
-    /**
-     * Render nodes or racks based on the view (mobility or UPF).
-     */
-    const renderNodes = () => {
-        if (upfView) {
-            return (
-                <Grid container spacing={2}>
-                    {Object.keys(nodesData.nodes || {}).map((region, index) => (
-                        <Region2
-                            key={index}
-                            region={region}
-                            nodes={nodesData.nodes[region]} // Use UPF-specific nodes
-                        />
-                    ))}
-                </Grid>
-            );
+        if (expanded) {
+            setShowMarket(false);
+            setExpandContainer(true);
+            setExpandMarketContainer(true);
         } else {
-            return (
-                <Grid container spacing={2}>
-                    {Object.keys(nodes || {}).map((region, index) => (
-                        <Region
-                            key={index}
-                            region={region}
-                            nodes={nodes[region]} // Use mobility-specific nodes
-                        />
-                    ))}
-                </Grid>
-            );
+            setShowMarket(true);
+            setExpandContainer(false);
+            setExpandMarketContainer(false);
         }
+    }, [expanded])
+
+    const handlePopoverOpen = (event) => {
+        const target = event.currentTarget;
+        setAnchorEl(target);
     };
+
+    const handlePopoverClose = () => {
+        setTimeout(() => {
+            if (!mouseIsOver) {
+                setAnchorEl(null);
+            }
+        })
+    };
+
+    const handleMouseEnterPopover = () => {
+        setMouseIsOver(true);
+    };
+
+    const handleMouseLeavePopover = () => {
+        setMouseIsOver(false);
+        setAnchorEl(null);
+    };
+
+    const open = Boolean(anchorEl);
+
+    const getColorPriority = () => {
+        if (stats[market] && stats[market].length) {
+            const pr = stats[market].map(_ => _.priority)
+            const priority = [...new Set(pr)];
+            if (priority.length > 0) {
+                if (priority.indexOf('critical') !== -1) {
+                    return '#ff0040';
+                } else if (priority.indexOf('major') !== -1) {
+                    return '#f2630a';
+                } else if (priority.indexOf('minor') !== -1) {
+                    return '#ffc33f';
+                } else if (priority.indexOf('normal') !== -1) {
+                    return '#198754';
+                } else if (priority.indexOf('oor') !== -1) {
+                    return '#198754';
+                } else {
+                    return 'darkgray';
+                }
+            }
+        }
+
+        return 'rgb(128, 128, 128)';
+    }
+
+    const mapData = () => {
+
+        return (<>
+            {
+                Object.keys(nodes)?.map((rack, index) => {
+                    if (rack === 'SMFRACK') {
+                        return (nodes[rack]?.map((node, index) => (
+                            <Node2 style={{
+                                minWidth: '32.45%',
+                                minHeight: 72,
+                                margin: '4px',
+                                border: '1px solid black',
+                                borderRadius: '6px'
+
+                            }} key={index} node={node} stats={stats} variation={'h6'} nest={nest} />
+                        )))
+                    } else {
+                        return (
+                            <Rack
+                                key={index}
+                                rack={rack}
+                                nodes={nodes[rack]}
+                                setExpandMarketContainer={setExpandMarketContainer}
+                                stats={stats}
+                                nest={nest}
+                            />
+                        )
+                    }
+                })
+            }
+        </>)
+    }
 
     return (
-        <Box sx={{ padding: "24px" }}>
-            {renderFilters()}
-            {renderNodes()}
-            {nodesData.loading && (
-                <Box sx={{ display: "flex", justifyContent: "center", marginTop: "20px" }}>
-                    <CircularProgress />
-                </Box>
-            )}
-        </Box>
-    );
-};
+        <div style={containerStyle}>
+            {
+                showMarket && (
+                    <>
+                        <Card
+                            style={{
+                                border: '2px solid black',
+                                margin: '4px',
+                                backgroundColor: getColorPriority(),
+                                color: 'white',
+                            }}
+                            onClick={(e) => {
+                                setExpanded(!expanded)
+                            }}
+                        >
+                            <CardContent style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                            }}>
+                                <Typography 
+                                    onMouseEnter={handlePopoverOpen}
+                                    onMouseLeave={handlePopoverClose} aria-owns={open ? 'mouse-over-marketpopover' : undefined}
+                                    aria-haspopup="true" 
+                                    sx={{ width: 'auto', display: 'inline-block' }} variant="h6">{`MKT::${market}`}</Typography>
+                            </CardContent>
 
-export default Dashboard;
+                            <Popover
+                                id="mouse-over-marketpopover"
+                                open={open}
+                                anchorEl={anchorEl}
+                                anchorOrigin={{
+                                    vertical: 'center',
+                                    horizontal: 'left',
+                                }}
+                                transformOrigin={{
+                                    vertical: 'top',
+                                    horizontal: 'left',
+                                }}
+                                onClose={handlePopoverClose}
+                                disableRestoreFocus
+
+                            >
+                                <Card onMouseEnter={handleMouseEnterPopover}
+                                    onMouseLeave={handleMouseLeavePopover}
+                                >
+                                    <CardContent style={{ backgroundColor: '#bfab5b',padding:'8px' }}
+                                    >
+                                        {
+                                            stats[market] && (
+                                                <KPIModalContent2 node={market} data={stats[market]} nest={nest} hideNest={true} />
+                                            )
+                                        }
+                                    </CardContent>
+                                </Card>
+                            </Popover>
+                        </Card>
+                    </>
+
+                )
+            }
+            {expanded && (
+                <Card style={{
+                    border: '2px solid black',
+                    margin: '4px',
+                    backgroundColor: expanded ? '#f2d8d8' : 'none',
+                }}>
+                    <CardContent>
+                        <Grid container spacing={1}>
+                            {
+                                !showMarket && (
+                                    <Card
+                                        style={{
+                                            border: '2px solid black',
+                                            margin: '4px',
+                                            backgroundColor: 'lightgray',
+                                            color: 'black',
+                                            width: '32.4%',
+                                            maxHeight: 76
+                                        }}
+                                        onClick={(e) => {
+                                            setExpanded(!expanded)
+                                        }}
+                                    >
+                                        <CardContent style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center'
+                                        }}>
+                                            <Typography sx={{ width: 'auto', display: 'inline-block', fontSize: '1rem' }} variant="h6"><IconButton><ArrowBackIcon style={{ marginRight: '8px' }} /></IconButton>{market}</Typography>
+                                        </CardContent>
+                                    </Card>
+                                )
+                            }
+                            {mapData()}
+                        </Grid>
+                    </CardContent>
+                </Card>
+            )}
+        </div>
+    );
+});
+
+export default Market;
