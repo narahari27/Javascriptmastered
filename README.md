@@ -1,69 +1,23 @@
-att
-: 
-"2"
-att_val
-: 
-0
-attempt
-: 
-null
-cnodename
-: 
-"null"
-display_type
-: 
-"kei"
-displaytype
-: 
-"kei"
-green
-: 
-"< 100"
-isCombiNode
-: 
-0
-is_active
-: 
-1
-kpi
-: 
-"Http Error Resp #5xx"
-nftype
-: 
-"null"
-node_name
-: 
-"CH1NRF01"
-node_type
-: 
-"nrf"
-orange
-: 
-"> 500 AND < 1000"
-pool
-: 
-"G"
-red
-: 
-"> 1000"
-succ
-: 
-null
-sw_version
-: 
-"null"
-thresholdId
-: 
-526
-thresholdtype
-: 
-"LessIsGood"
-time_value
-: 
-"2025-01-27 10:15:00"
-type
-: 
-"NRD"
-yellow
-: 
-"> 100 AND < 500"
+ "time_value": "2025-01-27 12:15:00",
+            "att": "363",
+            "succ": "0.4",
+            "node_name": "CR1NRF01",
+            "kpi": "Management TPS",
+            "display_type": "kpi",
+            "node_type": "nrf",
+            "pool": "SE1",
+            "cnodename": "null",
+            "isCombiNode": 0,
+            "sw_version": "null",
+            "type": "null",
+            "nftype": "SMF",
+            "attempt": null,
+            "att_val": 0,
+            "green": "<85",
+            "yellow": "> 85 AND < 90",
+            "orange": ">  90 AND <  95",
+            "red": ">  95",
+            "displaytype": "kpi",
+            "thresholdtype": "LessIsGood",
+            "is_active": 1,
+            "thresholdId": 514
