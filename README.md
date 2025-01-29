@@ -1,15 +1,48 @@
-const checkNodeTypeConditions = (node) => {
-  switch (node.nodetype) {
-    case "mme":
-    case "amf":
-      return node.stats?.RC_Value?.att !== 50 || node.stats?.RC?.att !== 50;
-    case "nrf":
-      return node.ntwCheck === 'ON';
-    case "vepdg":
-      return node.stats?.OOR?.att !== "OOR";
-    case "smsf":
-      return node.stats?.ModelD?.att === 'true';
-    default:
-      return true;
-  }
-};
+"time_value": "2025-01-29 12:30:00",
+            "att": "102",
+            "succ": "100",
+            "host_name": "HI1NRF01",
+            "kpi": "Discovery",
+            "display_type": "kpi",
+            "nodetype": "nrf",
+            "pool": "HI",
+            "cnodename": "null",
+            "isCombiNode": 0,
+            "sw_version": "null",
+            "type": "NRD",
+            "nftype": "null",
+            "attempt": null,
+            "att_val": 0,
+            "green": ">95",
+            "yellow": "> 90 AND < 95",
+            "orange": ">  85 AND <  90",
+            "red": "<  85",
+            "displaytype": "kpi",
+            "thresholdtype": "MoreIsGood",
+            "is_active": 1,
+            "thresholdId": 505
+        },
+        "time_value": "2025-01-29 12:30:00",
+            "att": "3430",
+            "succ": "100",
+            "host_name": "DA2NRF01",
+            "kpi": "Discovery",
+            "display_type": "kpi",
+            "nodetype": "nrf",
+            "pool": "SW",
+            "cnodename": "null",
+            "isCombiNode": 0,
+            "sw_version": "null",
+            "type": "null",
+            "nftype": "AMF",
+            "attempt": null,
+            "att_val": 0,
+            "green": ">95",
+            "yellow": "> 90 AND < 95",
+            "orange": ">  85 AND <  90",
+            "red": "<  85",
+            "displaytype": "kpi",
+            "thresholdtype": "MoreIsGood",
+            "is_active": 1,
+            "thresholdId": 505
+        },
