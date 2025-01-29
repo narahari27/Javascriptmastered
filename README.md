@@ -1,23 +1,31 @@
- "time_value": "2025-01-27 12:15:00",
-            "att": "363",
-            "succ": "0.4",
-            "node_name": "CR1NRF01",
-            "kpi": "Management TPS",
-            "display_type": "kpi",
-            "node_type": "nrf",
-            "pool": "SE1",
-            "cnodename": "null",
-            "isCombiNode": 0,
-            "sw_version": "null",
-            "type": "null",
-            "nftype": "SMF",
-            "attempt": null,
-            "att_val": 0,
-            "green": "<85",
-            "yellow": "> 85 AND < 90",
-            "orange": ">  90 AND <  95",
-            "red": ">  95",
-            "displaytype": "kpi",
-            "thresholdtype": "LessIsGood",
-            "is_active": 1,
-            "thresholdId": 514
+useEffect(() => {
+    if (data.length) {
+      // let temp = processVEPDGNodes([...data]);
+      if (!oor) {
+        let temp = data.filter(_ => (_.nestStatus?.toLowerCase() === 'inservice' || _.nestStatus?.toLowerCase() === 'not_found'));
+        temp = temp.filter((_) => (_?.priority !== 'oor'));
+        
+        //   if (_.nodetype === "mme"){
+        //     return ( _.stats?.RC_Value?.att != 50 || _.stats?.RC?.att != 50)
+        //   } else if (_.nodetype === "amf") {
+        //     return ( _.stats?.RC_Value?.att != 50 || _.stats?.RC?.att != 50)
+        //   } else if (_.nodetype === 'nrf') {
+        //     return _.ntwCheck === 'ON';
+        //   } else if (_.nodetype === "vepdg") {
+        //     return _.stats?.OOR?.att !== "OOR"
+        //   } else if (_.nodetype === "smsf") {
+        //     return _.stats?.ModelD?.att === 'true'
+        //   } else {
+        //     return _
+        //   }
+        // });
+        setNodes(groupByPool(temp));
+        setBasefilters(getFilters(data));
+        setFilteredNodes(groupByRegions(temp));
+      } else {
+        setNodes(groupByPool(data));
+        setBasefilters(getFilters(data));
+        setFilteredNodes(groupByRegions(data));
+      }
+    }
+  }, [data, oor, priorityFilter]);
