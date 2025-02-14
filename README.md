@@ -199,9 +199,10 @@ const KPIModalContent = React.memo(({ node, data, isSmf, nest, hideNest = false 
     //         </>
     //     )
     // }
-    const getData = (kpiData =[], splitData, showFirst, isSmf) => {
-        if(!kpiData) kpiData = [];
-       const hardcodedKpiList = [
+    const getData = (kpiData, splitData, showFirst, isSmf) => {
+        let data = [...kpiData];
+       const obj = {
+       kpi: [
        "4G Attach SGW",
        "4G Create Session",
        "4G Modify Bearer",
@@ -237,43 +238,45 @@ const KPIModalContent = React.memo(({ node, data, isSmf, nest, hideNest = false 
        "VoLTE Ded Bearer Modify",
        "VoNR Ded Bearer Create",
        "VoNR Ded Bearer Modify"
+        ],
+       kci: [
+       "5QI-1",
+       "5QI-1 WLAN",
+       "QCI-1 EUTRAN",
+       "QCI-1 WLAN",
+       "Session EUTRAN",
+       "Session NR",
+       "Sessions Total",
+       "SMF Status"
         ]
-       
-        
-        // data = data.map(item => {
-        //     const updatedItem = { ...item };
-        //    if (updatedItem.display_type === "kpi" && obj.kpi.includes(updatedItem.kpi)) {
-        //    updatedItem.kpi = updatedItem.kpi;
-        //     } else if (updatedItem.display_type === "kci" && obj.kci.includes(updatedItem.kpi)) {
-        //    updatedItem.kpi = updatedItem.kpi;
-        //     } else {
-        //    updatedItem.kpi = updatedItem.display_type === "kpi" ? obj.kpi[0] : obj.kci[0];
-        //     }
-        //    return updatedItem;
-        //     });
-        //     console.log(splitData)
-        const mergedData = hardcodedKpiList.map(kpiName =>{
-            const existingKpi = kpiData.find(d=> d.kpi === kpiName && d.displaytype === "kpi");
-            return existingKpi || {kpi: kpiName, succ:null, att:null, displaytype:"kpi"};
-        });
-        
-        data = [...mergedData]
+        };
+        data = data.map(item => {
+            const updatedItem = { ...item };
+           if (updatedItem.display_type === "kpi" && obj.kpi.includes(updatedItem.kpi)) {
+           updatedItem.kpi = updatedItem.kpi;
+            } else if (updatedItem.display_type === "kci" && obj.kci.includes(updatedItem.kpi)) {
+           updatedItem.kpi = updatedItem.kpi;
+            } else {
+           updatedItem.kpi = updatedItem.display_type === "kpi" ? obj.kpi[0] : obj.kci[0];
+            }
+           return updatedItem;
+            });
+            console.log(splitData)
             if(splitData && isSmf){
                         if(data.length % 2 !== 0){
                             data.push({kpi: '', succ: '', att: ''})
                         }
                         const mid = Math.ceil(data.length / 2);
-                        // const first = data.slice(0, mid);
-                        // const second =  data.slice(mid);
-                        // if(showFirst){
-                        //     data = first;
-                        // }else {
-                        //     data = second;
-                        // }
-                        data = showFirst? data.slice(0,mid) : data.slice(mid);
+                        const first = data.slice(0, mid);
+                        const second =  data.slice(mid);
+                        if(showFirst){
+                            data = first;
+                        }else {
+                            data = second;
+                        }
                     }
         
-       
+        console.log(data)
                 return (
                     <>
                       {data.map((kpi, index) => (
@@ -286,30 +289,20 @@ const KPIModalContent = React.memo(({ node, data, isSmf, nest, hideNest = false 
                     </>
                   );
     }
-    const getKciData = (kciData =[], splitData, showFirst) => {
-        if(!kciData) kciData = [];
-        const hardcodedKciList =[
-            "5QI-1",
-       "5QI-1 WLAN",
-       "QCI-1 EUTRAN",
-       "QCI-1 WLAN",
-       "Session EUTRAN",
-       "Session NR",
-       "Sessions Total",
-       "SMF Status"
-        ];
-
-        const mergedKciData = hardcodedKciList.map(kciName =>{
-            const existingKci = data.find(d=> d.kci === kciName && d.displaytype === "kci");
-            return existingKci || {kpi: kciName, succ:null, att:null, displaytype:"kci"};
-        });
-        let data =[...mergedKciData];
+    const getKciData = (kpiData, splitData, showFirst) => {
+        let data = kpiData;
         if(splitData && isSmf){
             if(data.length % 2 !== 0){
                 data.push({kpi: '', succ: '', att: ''})
             }
             const mid = Math.ceil(data.length / 2);
-            data = showFirst ? data.slice(0,mid):data.slice(mid);
+            const first = data.slice(0, mid);
+            const second =  data.slice(mid);
+            if(showFirst){
+                data = first;
+            }else {
+                data = second;
+            }
         }
         return (
             <>
