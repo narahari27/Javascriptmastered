@@ -200,8 +200,8 @@ const KPIModalContent = React.memo(({ node, data, isSmf, nest, hideNest = false 
     //     )
     // }
     const getData = (kpiData =[], splitData, showFirst, isSmf) => {
-        if(!kpiData) kpiData = [];
-       const hardcodedKpiList = [
+        if(!kpiData)kpiData = [];
+       const hardcodedKpiListLeft = [
        "4G Attach SGW",
        "4G Create Session",
        "4G Modify Bearer",
@@ -218,7 +218,9 @@ const KPIModalContent = React.memo(({ node, data, isSmf, nest, hideNest = false 
        "N11 Update Context",
        "N1N2 Message Transfer",
        "N4 Session Establishment",
-       "N4 Session Modification",
+       "N4 Session Modification"
+        ];
+        const hardcodedKpiListRight=[
        "N4 Session Report",
        "N40 Charging Data Initial",
        "N40 Charging Data Notify",
@@ -237,50 +239,25 @@ const KPIModalContent = React.memo(({ node, data, isSmf, nest, hideNest = false 
        "VoLTE Ded Bearer Modify",
        "VoNR Ded Bearer Create",
        "VoNR Ded Bearer Modify"
-        ]
-       
-        
-        // data = data.map(item => {
-        //     const updatedItem = { ...item };
-        //    if (updatedItem.display_type === "kpi" && obj.kpi.includes(updatedItem.kpi)) {
-        //    updatedItem.kpi = updatedItem.kpi;
-        //     } else if (updatedItem.display_type === "kci" && obj.kci.includes(updatedItem.kpi)) {
-        //    updatedItem.kpi = updatedItem.kpi;
-        //     } else {
-        //    updatedItem.kpi = updatedItem.display_type === "kpi" ? obj.kpi[0] : obj.kci[0];
-        //     }
-        //    return updatedItem;
-        //     });
-        //     console.log(splitData)
-        const mergedData = hardcodedKpiList.map(kpiName =>{
-            const existingKpi = kpiData.find(d=> d.kpi === kpiName && d.displaytype === "kpi");
-            return existingKpi || {kpi: kpiName, succ:null, att:null, displaytype:"kpi"};
-        });
-        
-        data = [...mergedData]
-            if(splitData && isSmf){
-                        if(data.length % 2 !== 0){
-                            data.push({kpi: '', succ: '', att: ''})
-                        }
-                        const mid = Math.ceil(data.length / 2);
-                        // const first = data.slice(0, mid);
-                        // const second =  data.slice(mid);
-                        // if(showFirst){
-                        //     data = first;
-                        // }else {
-                        //     data = second;
-                        // }
-                        data = showFirst? data.slice(0,mid) : data.slice(mid);
-                    }
-        
-       
+        ];
+        const hardcodedKpiList = showFirst ? hardcodedKpiListLeft : hardcodedKpiListRight;
+            let data = hardcodedKpiList.map(kpiName=>{
+                const existingkpi = kpiData.find(d=>d.kpi === kpiName && d.displaytype === "kpi");
+                return existingkpi || {
+                    kpi:kpiName,
+                    succ: null,
+                    att: null,
+                    displaytype:"kpi",
+                    is_active:false
+                };
+            });
                 return (
                     <>
                       {data.map((kpi, index) => (
                         <TableRow key={`KPI_DATA${index}`} style={{ minHeight: "20px" }}>
                           <TableCell style={getCellStyle(kpi)}>{kpi?.kpi}</TableCell>
-                          <TableCell style={styles.tableCell}> {kpi.suc ? Number(kpi.suc) : ""} </TableCell>
-                          <TableCell style={styles.tableCell}>{kpi.att && Number(kpi.att) > 0 ? ~~Number(kpi.att) : ""}</TableCell>
+                          <TableCell style={styles.tableCell}> {kpi.suc ? Number(kpi.suc) : "null"} </TableCell>
+                          <TableCell style={styles.tableCell}>{kpi.att && Number(kpi.att) > 0 ? ~~Number(kpi.att) : "null"}</TableCell>
                         </TableRow>
                       ))}
                     </>
@@ -288,29 +265,29 @@ const KPIModalContent = React.memo(({ node, data, isSmf, nest, hideNest = false 
     }
     const getKciData = (kciData =[], splitData, showFirst) => {
         if(!kciData) kciData = [];
-        const hardcodedKciList =[
+        const hardcodedKciListLeft =[
             "5QI-1",
        "5QI-1 WLAN",
        "QCI-1 EUTRAN",
        "QCI-1 WLAN",
-       "Session EUTRAN",
+        ];
+        const hardcodedKciListRight=[
+            "Session EUTRAN",
        "Session NR",
        "Sessions Total",
        "SMF Status"
-        ];
-
-        const mergedKciData = hardcodedKciList.map(kciName =>{
-            const existingKci = data.find(d=> d.kci === kciName && d.displaytype === "kci");
-            return existingKci || {kpi: kciName, succ:null, att:null, displaytype:"kci"};
+        ]
+        const hardcodedKciList = showFirst ? hardcodedKciListLeft: hardcodedKciListRight;
+        let data = hardcodedKciList.map(kciName=>{
+            const existingkci = kciData.find(d=>d.kpi === kciName && d.displaytype === "kci");
+            return existingkci || {
+                kpi:kciName,
+                succ: null,
+                att: null,
+                displaytype:"kci",
+                is_active:false
+            };
         });
-        let data =[...mergedKciData];
-        if(splitData && isSmf){
-            if(data.length % 2 !== 0){
-                data.push({kpi: '', succ: '', att: ''})
-            }
-            const mid = Math.ceil(data.length / 2);
-            data = showFirst ? data.slice(0,mid):data.slice(mid);
-        }
         return (
             <>
                 {
@@ -318,7 +295,7 @@ const KPIModalContent = React.memo(({ node, data, isSmf, nest, hideNest = false 
                         <TableRow key={`KCI_DATA${index}`} style={{minHeight:'20px'}}>
                             <TableCell style={getCellStyle(kpi)}>{kpi?.kpi}</TableCell>
                             {isSmf && <TableCell style={styles.tableCell}></TableCell>}
-                            <TableCell style={styles.tableCell}>{kpi.att && Number(kpi.att) > 0 ? ~~ Number(kpi.att) : ''}</TableCell>
+                            <TableCell style={styles.tableCell}>{kpi.att && Number(kpi.att) > 0 ? ~~ Number(kpi.att) : 'null'}</TableCell>
                         </TableRow>
                     ))
                 }
