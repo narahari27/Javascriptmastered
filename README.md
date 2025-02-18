@@ -1,480 +1,196 @@
-import React, { useContext } from 'react';
-import { Table, TableHead, TableBody, TableRow, TableCell, Box, Typography, Grid } from '@mui/material';
-import moment from 'moment-timezone';
-import { NodeContext } from '../NodeContext';
+const KPI_NAME = {
+    'UE_Attach_SR': 'Attach',
+    'UE_ServiceReq_SR': 'Service Request',
+    'UE_Authen_SR': 'UE Authentication',
+    'HSS_Authen_SR': 'HSS Authentication (AIA/AIR)',
+    'Update_Location_SR': 'Update Location (ULA/ULR)',
+    'Def_Bearer_SR': 'Default Bearer Activation',
+    'PDNConnReq_SR': 'PDN Connectivity',
+    'PdnConnIms_SR': 'PDN Connectivity (IMS)',
+    'Create_Ded_Bearer_QCI1': 'Create Ded Bearer (VoLTE)',
+    'UpdateDedicatedBearer_QCI_1_SR': 'Update Ded Bearer (VoLTE)',
+    'Create_Ded_Bearer_QCI2': 'Create Ded Bearer (PoLTE/QCI2)',
+    'EmergencyAttach_Res': 'Attach (Emergency)',
+    'MobileTermLocRequests_SR': 'MT Location Request',
+    'Paging_Resp_SR': 'Paging',
+    'Total_TAU_SR': 'Tracking Area Update (TAU)',
+    'UE_RF_Drp_Rate': 'UE RF Drop Rate',
+    'CreateDedBea_QCI1_DrpRate_Res': 'Ded Bearer RF Drop Rate(QCI1)',
+    'GTP_S11_SR': 'GTP-C S11 Resp/Request',
+    'NbrProceduresProcessed_sum_SR': 'All MME Procedure Processed',
+    'DNS_SR': 'DNS (MME<->DNS-G)'
+}
 
-const timeZone = 'UTC';
+let isString = value => typeof value === 'string' || value instanceof String;
 
-const styles = {
-    tableTop: {
-        borderCollapse: 'collapse',
-        border: '1px solid black',
-        width: 500,
-    },
-    tableTopSmf: {
-        borderCollapse: 'collapse',
-        border: '1px solid black',
-        width: 680,
-    },
-    table: {
-        borderCollapse: 'collapse',
-        border: '1px solid black',
-        width: 430,
-    },
-    tableMkt: {
-        borderCollapse: 'collapse',
-        border: '1px solid black',
-        width: 600,
-    },
-    tableRight: {
-        borderCollapse: 'collapse',
-        border: '1px solid black',
-        width: 320,
-    },
-    tableHead: {
-        backgroundColor: '#d6006e',
-        color: '#fff'
-    },
-    tableCell: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'inherit',
-        fontSize: '12px',
-        height: '20px'
-    },
-    tableCellCentered: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'inherit',
-        fontSize: '12px',
-        textAlign: 'center'
-    },
-    tableCellTransparent: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'black',
-        fontSize: '12px',
-        backgroundColor: '#bfab5b',
-        width: 430,
-    },
-    tableCellColored: {
-        border: '1px solid black',
-        padding: '2px',
-        backgroundColor: '#d6006e',
-        color: 'white',
-        fontSize: '12px',
-    },
-    tableCellFixed: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'inherit',
-        fontSize: '12px',
-        width: 200,
-    },
-    tableCellMkt: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'inherit',
-        fontSize: '12px',
-        width: 250,
-    },
-    tableCellSmall: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'inherit',
-        fontSize: '12px',
-        width: 100,
-    },
-};
+function determinePriority(stat) {
+    if(stat?.nodetype === "nrf" && (stat?.display_type === "kpi" || stat?.displaytype === "kpi") && !stat?.att){
+        return;
+    }
+    if(stat.is_active === 0){
+        return;
+    }
+    if (!stat.red && !stat.orange && !stat.green && !stat.yellow) {
+        return;
+    }
 
-const KPIModalContent = React.memo(({ node, data, isSmf, nest, hideNest = false }) => {
+    if(!isString(stat.red) && !isString(stat.orange) && !isString(stat.green) && !isString(stat.yellow)) {
+        return 'normal';
+    }
+    
+    const greenCondition = parseCondition(stat.green);
+    const orangeCondition = parseCondition(stat.orange);
+    const redCondition = parseCondition(stat.red);
+    const yellowCondition = parseCondition(stat.yellow);
+    let calcAttempt = false;
 
-    const getColorPriority = (priority) => {
-        switch (priority) {
-            case 'critical':
-                return '#dc3545';
-            case 'major':
-                return '#ff5722';
-            case 'minor':
-                return '#ffff00';
-            case 'oor':
-                return '#0a58ca';
-            case 'normal':
-                return '#07664d';
+    if (stat?.attempt == 1) {
+        calcAttempt = true;
+    }
 
+    const valueToCompare = stat?.display_type == 'kpi' ? stat?.succ : stat?.att;
+
+    const conditions = {'normal': greenCondition, 'major': orangeCondition, 'critical': redCondition, 'minor': yellowCondition}
+    for(let priority in conditions){
+        const parts = conditions[priority].split('&&');
+        let logic = ''
+        if(parts.length == 2 ){
+            logic = 'value' + ' ' + parts[0] + ' && ' + 'value' + parts[1];
+        }else {
+            logic = 'value' + ' ' + parts[0]
+        }
+       
+        const conditionMet = new Function('value', `return ${logic};`);
+        if(conditionMet(valueToCompare)){
+            if (calcAttempt) {
+                if (stat.display_type == 'kpi' &&  (stat.att == 0 && (stat.succ == 0 || stat.succ == null || stat.succ == undefined || stat.succ == 'null'))) {
+                    return 'normal'
+                } else if (stat.att > stat?.att_val) {
+                    return priority
+                } else {
+                    return 'critical'
+                }
+            }
+            return priority
+        }
+    }
+    
+}
+
+function parseCondition(condition) {
+    if (!condition) {
+        return null;
+    }
+
+    return condition.replace(/\s{2,}/g, ' ').replace(/and/g, '&&').replace(/AND/g, '&&').replace(/or/g, '||').replace(/OR/g, '||')
+}
+
+function checkCondition(conditions, value, stat) {
+   
+    return conditions.every(condition => {
+        switch (condition.operator) {
+            case '>':
+                return value > condition.value;
+            case '<':
+                return value < condition.value;
+            case '>=':
+                return value >= condition.value;
+            case '<=':
+                return value <= condition.value;
             default:
-                return '#000';
+                return false;
         }
+    });
+}
+
+function calculatePriority(stats) {
+    const last_value = stats.rate;
+    if (last_value < stats?.orange) {
+        return 'critical';
+    } else if (last_value < stats?.yellow && last_value >= stats?.orange) {
+        return 'major';
+    } else if (last_value < stats?.green && last_value >= stats?.yellow) {
+        return 'minor';
+    } else if (last_value >= stats?.green) {
+        return 'normal';
     }
 
-    const getCellStyle = (data) => {
-        return {
-            border: '1px solid black',
-            padding: '2px',
-            color: data?.is_active ? getColorPriority(data?.priority) : 'black',
-            fontSize: '12px',
-            minHeight: '20px'
-        };
-    };
+    return;
+}
 
-    const getNestStatusStyle = (status) => {
-        return {
-            border: '1px solid black',
-            padding: '2px',
-            color: status !== 'InService' ? '#ff0040' : 'inherit',
-            fontSize: '12px',
-            textAlign: 'center'
-        }
-    }
+function processData(data) {
+    const { stats, avg } = data;
 
-    const showTime = (date) => {
-        if (date) {
-            return  moment(date).format('DD MMM YYYY HH:mm:ss [GMT]');
+    const AVG = avg?.reduce((acc, curr) => {
+        if (!acc[curr.host_name]) {
+            acc[curr.host_name] = {}
+            acc[curr.host_name][curr.kpi] = curr.last_7_avg_succ
         } else {
-            return '';
+            acc[curr.host_name][curr.kpi] = curr.last_7_avg_succ
         }
-    }
+        return acc;
+    }, {});
 
-    const getFrateData = (kpi) => {
-        return (
-            <>
-                {
-                    kpi.kpi && (
-                        <TableRow>
-                            <TableCell style={getCellStyle(kpi)}>{kpi?.kpi}</TableCell>
-                            <TableCell style={styles.tableCell}>{kpi.frate ? Number(kpi.frate)?.toFixed(2) : ''}</TableCell>
-                            <TableCell style={styles.tableCell}>{kpi.avg_frate ? Number(kpi.avg_frate)?.toFixed(2) : ''}</TableCell>
-                            <TableCell style={styles.tableCell}>{kpi.var_frate ? Number(kpi.var_frate)?.toFixed(2) : ''}</TableCell>
-                        </TableRow>
-                    )
-                }
-            </>
-        )
-    }
-
-    const getSumData = (kpi) => {
-        return (
-            <>
-                {
-                    kpi.kpi && (
-                        <TableRow>
-                            <TableCell style={getCellStyle(kpi)}>{kpi?.kpi}</TableCell>
-                            <TableCell style={styles.tableCell}>{kpi.sum ? Number(kpi.sum)?.toFixed(2) : ''}</TableCell>
-                            <TableCell style={styles.tableCell}>{kpi.avg_sum ? Number(kpi.avg_sum)?.toFixed(2) : ''}</TableCell>
-                            <TableCell style={styles.tableCell}>{kpi.var_sum ? Number(kpi.var_sum)?.toFixed(2) : ''}</TableCell>
-                        </TableRow>
-                    )
-                }
-            </>
-        )
-    }
-
-    // const getData = (kpiData, splitData, showFirst) => {
-    //     let data = kpiData;
-    //     if(splitData && isSmf){
-    //         if(data.length % 2 !== 0){
-    //             data.push({kpi: '', succ: '', att: ''})
-    //         }
-    //         const mid = Math.ceil(data.length / 2);
-    //         const first = data.slice(0, mid);
-    //         const second =  data.slice(mid);
-    //         if(showFirst){
-    //             data = first;
-    //         }else {
-    //             data = second;
-    //         }
-    //     }
-    //     console.log(data)
-    //     return (
-    //         <>
-    //             {
-    //                 data.map((kpi, index) => (
-    //                     <TableRow key={`KPI_DATA${index}`} style={{minHeight: '20px'}}>
-    //                         <TableCell style={getCellStyle(kpi)}>{kpi?.kpi}</TableCell>
-    //                         <TableCell style={styles.tableCell}>{kpi.suc ? Number(kpi.suc) : ''}</TableCell>
-    //                         <TableCell style={styles.tableCell}>{kpi.att && Number(kpi.att) > 0 ? ~~ Number(kpi.att) : ''}</TableCell>
-    //                     </TableRow>
-    //                 ))
-    //             }
-    //         </>
-    //     )
-    // }
-    const getData = (kpiData =[], splitData, showFirst, isSmf) => {
-        if(!kpiData)kpiData = [];
-       const hardcodedKpiListLeft = [
-       "4G Attach SGW",
-       "4G Create Session",
-       "4G Modify Bearer",
-       "4G PDN Session Create",
-       "4G Update Bearer",
-       "4G_to_5G_HO_SR",
-       "5G PDN Session Create",
-       "5G to 4G HO",
-       "CEPS",
-       "N10 Subscribe Notify",
-       "N10 Subscription Fetch",
-       "N10 UE Register",
-       "N11 Create Context",
-       "N11 Update Context",
-       "N1N2 Message Transfer",
-       "N4 Session Establishment",
-       "N4 Session Modification"
-        ];
-        const hardcodedKpiListRight=[
-       "N4 Session Report",
-       "N40 Charging Data Initial",
-       "N40 Charging Data Notify",
-       "N40 Charging Data Update",
-       "N7 Policy Create",
-       "N7 Policy Update",
-       "Nnrf Heartbeat",
-       "Nnrf Subscription",
-       "Secondary PDN Creation",
-       "Sxa Session Establishment",
-       "Sxa Session Modification",
-       "Sxa Session Report",
-       "4G Create Bearer",
-       "EPSFB Dedicated Bearer",
-       "VoLTE Ded Bearer Create",
-       "VoLTE Ded Bearer Modify",
-       "VoNR Ded Bearer Create",
-       "VoNR Ded Bearer Modify"
-        ];
-        const hardcodedKpiList = showFirst ? hardcodedKpiListLeft : hardcodedKpiListRight;
-            let data = hardcodedKpiList.map(kpiName=>{
-                const existingkpi = kpiData.find(d=>d.kpi === kpiName && d.displaytype === "kpi");
-                return existingkpi || {
-                    kpi:kpiName,
-                    succ: null,
-                    att: null,
-                    displaytype:"kpi",
-                    is_active:false
-                };
-            });
-                return (
-                    <>
-                      {data.map((kpi, index) => (
-                        <TableRow key={`KPI_DATA${index}`} style={{ minHeight: "20px" }}>
-                          <TableCell style={getCellStyle(kpi)}>{kpi?.kpi}</TableCell>
-                          <TableCell style={styles.tableCell}> {kpi.suc ? Number(kpi.suc) : "null"} </TableCell>
-                          <TableCell style={styles.tableCell}>{kpi.att && Number(kpi.att) > 0 ? ~~Number(kpi.att) : "null"}</TableCell>
-                        </TableRow>
-                      ))}
-                    </>
-                  );
-    }
-    const getKciData = (kciData =[], splitData, showFirst) => {
-        if(!kciData) kciData = [];
-        const hardcodedKciListLeft =[
-            "5QI-1",
-       "5QI-1 WLAN",
-       "QCI-1 EUTRAN",
-       "QCI-1 WLAN",
-        ];
-        const hardcodedKciListRight=[
-            "Session EUTRAN",
-       "Session NR",
-       "Sessions Total",
-       "SMF Status"
-        ]
-        const hardcodedKciList = showFirst ? hardcodedKciListLeft: hardcodedKciListRight;
-        let data = hardcodedKciList.map(kciName=>{
-            const existingkci = kciData.find(d=>d.kpi === kciName && d.displaytype === "kci");
-            return existingkci || {
-                kpi:kciName,
-                succ: null,
-                att: null,
-                displaytype:"kci",
-                is_active:false
-            };
-        });
-        return (
-            <>
-                {
-                    data.map((kpi, index) => (
-                        <TableRow key={`KCI_DATA${index}`} style={{minHeight:'20px'}}>
-                            <TableCell style={getCellStyle(kpi)}>{kpi?.kpi}</TableCell>
-                            {isSmf && <TableCell style={styles.tableCell}></TableCell>}
-                            <TableCell style={styles.tableCell}>{kpi.att && Number(kpi.att) > 0 ? ~~ Number(kpi.att) : 'null'}</TableCell>
-                        </TableRow>
-                    ))
-                }
-            </>
-        )
-    }
-
-    const getLocation = () => {
-        const _node = data[0]
-        let name = _node?.pool;
-
-        if (_node.market_name && _node.market_name != "null") {
-            name += `/${_node.market_name}`
-        }
-
-        if (_node.rack_name && _node.rack_name != "null") {
-            name += `/${_node.rack_name}`
-        }
-
-        if (_node.node_name && _node.node_name != "null") {
-            name += `/${_node.node_name}`
-        }
-
-        return name;
-    }
-
-    const getNest = () => {
-        if (nest) {
-            return nest[node.host_name]
+    const ATT = avg?.reduce((acc, curr) => {
+        if (!acc[curr.host_name]) {
+            acc[curr.host_name] = {}
+            acc[curr.host_name][curr.kpi] = curr.last_7_avg_att
         } else {
-            return 'NA'
+            acc[curr.host_name][curr.kpi] = curr.last_7_avg_att
         }
-    }
+        return acc;
+    }, {});
 
-    return (
-        <>
-            {
-                !isSmf && (
-                    <>
-                        <Table style={styles.tableMkt}>
-                            <TableHead style={styles.tableHead}>
-                                <TableRow>
-                                    <TableCell style={styles.tableCellTransparent}>{`Location: ${getLocation()}`}</TableCell>
-                                    {!hideNest && <TableCell style={styles.tableCellCentered}>Nest Status</TableCell>}
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                <TableRow>
-                                    <TableCell style={styles.tableCell}>{`KPI Interval: ${showTime(data[0]?.time_value)}`}</TableCell>
-                                    {!hideNest && <TableCell style={getNestStatusStyle(getNest())}>{getNest()}</TableCell>}
-                                </TableRow>
-                            </TableBody>
-                        </Table>
-                        <Grid container>
-                            <Grid item>
-                                <Table style={styles.tableMkt}>
-                                    <TableHead style={styles.tableHead}>
-                                        <TableRow>
-                                            <TableCell style={styles.tableCellMkt}> 15 min KPI </TableCell>
-                                            <TableCell style={styles.tableCellMkt}> Failure Rate </TableCell>
-                                            <TableCell style={styles.tableCellMkt}> Failure Rate 7 Day Avg </TableCell>
-                                            <TableCell style={styles.tableCellMkt}> Failure Rate Variation % </TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {getFrateData(data?.filter(_ => _.kpi.indexOf('Throughput') === -1).length ? data?.filter(_ => _.kpi.indexOf('Throughput') === -1)[0] : {})}
-                                    </TableBody>
-                                </Table>
-                                <Table style={styles.tableMkt}>
-                                    <TableHead style={styles.tableHead}>
-                                        <TableRow>
-                                            <TableCell style={styles.tableCellMkt}> 15 min KPI </TableCell>
-                                            <TableCell style={styles.tableCellMkt}> Sum </TableCell>
-                                            <TableCell style={styles.tableCellMkt}> Sum 7 Day Avg </TableCell>
-                                            <TableCell style={styles.tableCellMkt}> Sum Variation % </TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {getSumData(data?.filter(_ => _.kpi.indexOf('Throughput') > -1).length ? data?.filter(_ => _.kpi.indexOf('Throughput') > -1)[0] : {})}
-                                    </TableBody>
-                                </Table>
-                            </Grid>
-                        </Grid>
-                    </>
-                )
+    const STATS = stats?.reduce((acc, curr) => {
+        if (curr.nodetype == 'nrf') {
+            if (!acc[curr.host_name]) {
+                acc[curr.host_name] = {}
             }
 
-            {
-                isSmf && (
-                    <>
-                        <Table style={styles.tableTopSmf}>
-                            <TableHead style={styles.tableHead}>
-                                <TableRow>
-                                    <TableCell style={styles.tableCellTransparent}>{`Location: ${getLocation()}`}</TableCell>
-                                    <TableCell style={styles.tableCellCentered}>Type</TableCell>
-                                    {!hideNest && <TableCell style={styles.tableCellCentered}>Nest Status</TableCell>}
-                                    <TableCell style={styles.tableCellCentered}>SW Version</TableCell>
-
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                <TableRow>
-                                    <TableCell style={styles.tableCell}>{`KPI Interval: ${showTime(data[0]?.time_value)}`}</TableCell>
-                                    <TableCell style={styles.tableCell}>{data[0]?.type}</TableCell>
-                                    {!hideNest && <TableCell style={getNestStatusStyle(getNest())}>{getNest()}</TableCell>}
-                                </TableRow>
-                            </TableBody>
-                        </Table>
-                        <Grid container>
-                            <Grid item xs>
-                                <Table style={styles.tableLeft}>
-                                    <TableHead style={styles.tableHead}>
-                                        <TableRow>
-                                            <TableCell style={styles.tableCellFixed}> 5 min KPI </TableCell>
-                                            <TableCell style={styles.tableCellSmall}> Succ </TableCell>
-                                            <TableCell style={styles.tableCellSmall}> Att </TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {getData(data?.filter((_) => _.displaytype === 'kpi'), true, true)}
-                                        {isSmf && (
-                                            <TableRow key={`KCI`}>
-                                                <TableCell style={styles.tableCell}>KCI</TableCell>
-                                                <TableCell style={styles.tableCell}></TableCell>
-                                                <TableCell style={styles.tableCell}></TableCell>
-                                            </TableRow>
-                                        )}
-                                        {isSmf && (
-                                            getKciData(data?.filter(_ => _.displaytype == 'kci'), true, true)
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </Grid>
-                            <Grid item xs>
-                                <Table style={styles.tableLeft}>
-                                    <TableHead style={styles.tableHead}>
-                                        <TableRow>
-                                            <TableCell style={styles.tableCellFixed}> 5 min KPI </TableCell>
-                                            <TableCell style={styles.tableCellSmall}> Succ </TableCell>
-                                            <TableCell style={styles.tableCellSmall}> Att </TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {getData(data?.filter((_) => _.displaytype === 'kpi'), true, false)}
-                                        {isSmf && (
-                                            <TableRow key={`KCI2`} style={{height: '23px'}}>
-                                                <TableCell style={styles.tableCell}>{' '}</TableCell>
-                                                <TableCell style={styles.tableCell}></TableCell>
-                                                <TableCell style={styles.tableCell}></TableCell>
-                                            </TableRow>
-                                        )}
-                                        {isSmf && (
-                                            getKciData(data?.filter(_ => _.displaytype == 'kci'), true, false)
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </Grid>
-
-                            {!isSmf && (
-                                <Grid item xs >
-                                    <Table style={styles.tableRight}>
-                                        <TableHead style={styles.tableHead}>
-                                            <TableRow>
-                                                <TableCell style={styles.tableCellFixed}> KCI </TableCell>
-                                                <TableCell style={styles.tableCellSmall}> Att </TableCell>
-                                            </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                            {getKciData(data?.filter(_ => _.displaytype == 'kci'))}
-                                        </TableBody>
-                                    </Table>
-                                </Grid>
-                            )}
-                        </Grid>
-                    </>
-                )
+            if (!acc[curr.host_name][curr.kpi]) {
+                acc[curr.host_name][curr.kpi] = {}
             }
-        </>
-    );
-});
+            
+            if (curr.type) {
+                acc[curr.host_name][curr.kpi][curr.type] = {
+                    ...curr,
+                    name: KPI_NAME[curr.kpi],
+                    priority: determinePriority(curr)
+                }
 
-export default KPIModalContent;
+            } else if (curr.nftype) {
+                acc[curr.host_name][curr.kpi][curr.nftype] = {
+                    ...curr,
+                    name: KPI_NAME[curr.kpi]
+                }
+            }
+        } else {
+            if (!acc[curr.host_name]) {
+                acc[curr.host_name] = {}
+                acc[curr.host_name][curr.kpi] = {
+                    ...curr,
+                    name: KPI_NAME[curr.kpi],
+                    priority: determinePriority(curr),
+                    avg: AVG && AVG[curr.host_name] ? AVG[curr.host_name][curr.kpi] : 0,
+                    last_7_att: ATT && ATT[curr.host_name] ? ATT[curr.host_name][curr.kpi] : 0
+                }
+            } else {
+                acc[curr.host_name][curr.kpi] = {
+                    ...curr,
+                    name: KPI_NAME[curr.kpi],
+                    priority: determinePriority(curr),
+                    avg: AVG && AVG[curr.host_name] ? AVG[curr.host_name][curr.kpi] : 0,
+                    last_7_att: ATT && ATT[curr.host_name] ? ATT[curr.host_name][curr.kpi] : 0
+                }
+            }
+        }
+        return acc;
+    }, {});
+
+    return STATS;
+}
+
+onmessage = function (e) {
+    const result = processData(e.data);
+    postMessage(result);
+};
