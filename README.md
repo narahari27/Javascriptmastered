@@ -24,8 +24,11 @@ const KPI_NAME = {
 let isString = value => typeof value === 'string' || value instanceof String;
 
 function determinePriority(stat) {
-    if(stat?.nodetype === "nrf" && (stat?.display_type === "kpi" || stat?.displaytype === "kpi") && !stat?.att){
+    if(stat?.nodetype === "nrf" && (stat?.display_type === "kpi" || stat?.displaytype === "kpi") && (stat?.att <= stat?.attempt)) {  
         return;
+    }
+    if(stat?.nodetype === "smsf" && stat?.display_type === "kpi" && stat?.succ === 0) {
+    return 'default';
     }
     if(stat.is_active === 0){
         return;
@@ -37,7 +40,7 @@ function determinePriority(stat) {
     if(!isString(stat.red) && !isString(stat.orange) && !isString(stat.green) && !isString(stat.yellow)) {
         return 'normal';
     }
-    
+
     const greenCondition = parseCondition(stat.green);
     const orangeCondition = parseCondition(stat.orange);
     const redCondition = parseCondition(stat.red);
@@ -59,7 +62,7 @@ function determinePriority(stat) {
         }else {
             logic = 'value' + ' ' + parts[0]
         }
-       
+
         const conditionMet = new Function('value', `return ${logic};`);
         if(conditionMet(valueToCompare)){
             if (calcAttempt) {
@@ -74,7 +77,7 @@ function determinePriority(stat) {
             return priority
         }
     }
-    
+
 }
 
 function parseCondition(condition) {
@@ -86,7 +89,7 @@ function parseCondition(condition) {
 }
 
 function checkCondition(conditions, value, stat) {
-   
+
     return conditions.every(condition => {
         switch (condition.operator) {
             case '>':
@@ -150,7 +153,7 @@ function processData(data) {
             if (!acc[curr.host_name][curr.kpi]) {
                 acc[curr.host_name][curr.kpi] = {}
             }
-            
+
             if (curr.type) {
                 acc[curr.host_name][curr.kpi][curr.type] = {
                     ...curr,
