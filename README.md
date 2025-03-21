@@ -1,12 +1,12 @@
 {
-            "time_value": "2025-03-21 12:00:00",
-            "att": "855",
-            "succ": "92.6",
-            "host_name": "PR2NRF01",
+            "time_value": "2025-03-21 12:15:00",
+            "att": "1706",
+            "succ": "86",
+            "host_name": "VG1NRF01",
             "kpi": "Notify",
             "display_type": "kpi",
             "nodetype": "nrf",
-            "pool": "PR",
+            "pool": "W2",
             "cnodename": "null",
             "isCombiNode": 0,
             "sw_version": "null",
@@ -22,4 +22,4 @@
             "thresholdtype": "MoreIsGood",
             "is_active": 1,
             "thresholdId": 511
-        }
+        },
