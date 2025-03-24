@@ -1,620 +1,460 @@
-import React, { useContext, useEffect, useState } from 'react';
-import { Table, TableHead, TableBody, TableRow, TableCell, Box, Typography, Grid } from '@mui/material';
+import React, { useState, useContext } from 'react';
+import { Card, CardContent, Typography, Menu, MenuItem, Popover, Modal, Box, Input, Button, IconButton, TextField, FormControl, InputLabel, Select, Grid } from '@mui/material';
+import { NodeContext } from "../NodeContext";
+import HistoryIcon from '@mui/icons-material/History';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
+import NoteAddIcon from '@mui/icons-material/NoteAdd';
+import CloseIcon from '@mui/icons-material/Close';
+import KPIModalContent2 from './KPIModalContent2';
+import axiosClient from '../api/client';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
+import DeleteIcon from '@mui/icons-material/Delete';
+import CommentIcon from '@mui/icons-material/Comment';
+import AutoDeleteIcon from '@mui/icons-material/AutoDelete';
 import moment from 'moment-timezone';
-import { NodeContext } from '../NodeContext';
+import { useSelector } from 'react-redux';
 
 const timeZone = 'UTC';
 
-const styles = {
-    tableTop: {
-        borderCollapse: 'collapse',
-        border: '1px solid black',
-        width: 750,
-    },
-    table: {
-        borderCollapse: 'collapse',
-        border: '1px solid black',
-        width: 430,
-    },
-    tableRight: {
-        borderCollapse: 'collapse',
-        border: '1px solid black',
-        width: 320,
-    },
-    tableHead: {
-        backgroundColor: '#d6006e',
-        color: '#fff'
-    },
-    tableCell: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'inherit',
-        fontSize: '12px',
-    },
-    tableCellCentered: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'inherit',
-        fontSize: '12px',
-        textAlign: 'center'
-    },
-    tableCellCenteredSmsf: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'inherit',
-        fontSize: '12px',
-        textAlign: 'center',
-        width: 50
-    },
-    tableCellTransparent: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'black',
-        fontSize: '12px',
-        backgroundColor: '#bfab5b',
-        width: 430,
-    },
-    tableCellTransparentSmsf: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'black',
-        fontSize: '12px',
-        backgroundColor: '#bfab5b',
-        width: 250,
-    },
-    tableCellColored: {
-        border: '1px solid black',
-        padding: '2px',
-        backgroundColor: '#d6006e',
-        color: 'white',
-        fontSize: '12px',
-    },
-    tableCellFixed: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'inherit',
-        fontSize: '12px',
-        width: 200,
-    },
+const modal = {
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  minWidth: 400,
+  bgcolor: 'background.paper',
+  border: '2px solid #000',
+  boxShadow: 24,
+  padding: 4,
+  width: '85%',
+  maxHeight: '85vh',
+  overflowY: 'auto',
 };
 
-const KPIModalContent = React.memo(({ node, data }) => {
-    const isSmsfNode = node.nodetype === "smsf";
-    const isVepdgNode = node.nodetype === "vepdg";
-    const hardcodedData = {
-        "amf": {
-            "kpi": [
-                "UE Registration",
-                "UE Registration Inital",
-                "UE Registration Mobility",
-                "AMF Registration(AMF->UDM)",
-                "AMF Authentication(AMF->AUSF)",
-                "AMF Authentication(5G AKA)",
-                "AMF Authentication(SMC)",
-                "Create SM Context (AMF->SMF)",
-                "Update SM Context",
-                "Retrieve SM Context",
-                "UE PDU Establish Initial",
-                "UE PDU Establish IMS",
-                "UE PDU Establish Existing",
-                "UE PDU Session Modify",
-                "SMF PDU Session Modify",
-                "UE Service Request",
-                "UE Service Request Data",
-                "Service Request MT",
-                "5GS->EPS Handover",
-                "Idle Mobility (5GS->EPS)",
-                "Idle Mobility (EPS->5GS)",
-                "UE Paging",
-                "NF Discovery SMF",
-                "UE Policy Create (N15)",
-                "Activate SMS(AMF<->SMSF)",
-                "EIR (AMF->5GEIR)"
-            ],
-            "kci": [
-                "Registered UE(5G)",
-                "Registered UE(IMS)",
-                "PDU Session(5G)",
-                "Connected UE(5G)",
-                "MPH Msgs /Second"
-            ],
-            "kei": [
-                "RegInitFail 5GMMCC#7",
-                "RegInitFail 5GMMCC#11",
-                "RegInitFail 5GMMCC#12",
-                "RegInitFail 5GMMCC#13",
-                "RegInitFail 5GMMCC#15",
-                "RegInitFail 5GMMCC#22",
-                "RegInitFail 5GMMCC#27",
-                "RegInitFail 5GMMCC#73",
-                "RegInitFail 5GMMCC#100",
-                "RegInitFail 5GMMCC#111",
-                "PduSessFail 5GMMCC#22",
-                "PduSessFail 5GMMCC#65",
-                "PduSessFail 5GMMCC#67",
-                "PduSessFail 5GMMCC#69",
-                "PduSessFail 5GMMCC#90",
-                "PduSessFail 5GMMCC#91",
-                "Create SM Context TimeOut",
-                "N2disabled",
-                "N2enabled"
-            ],
-            "kii": [
-                "RC"
-            ]
-        },
-        "mme": {
-            "kpi": [
-                "Attach",
-                "UE Authentication",
-                "HSS Authentication (MME<->HSS)",
-                "Update Location (ULR/ULA)",
-                "Default Bearer Activation",
-                "PDN Connectivity",
-                "PDN Connectivity (IMS)",
-                "Created Ded Bearer (VoLTE)",
-                "Service Request",
-                "Tracking Area Update (TAU)",
-                "Paging",
-                "UE RF Drop Rate",
-                "5G->EPS HO",
-                "All MME Procedure Processed",
-                "GTPC S11 Response/Request",
-                "Update Dedicated Bearer(VoLTE)",
-                "DNS (MME<->DNS-G)",
-            ],
-            "kci": [
-                "Registered UEs",
-                "QCI1 Ded Bearer",
-                "Dedicated Bearer",
-                "Total MPH Messages/sec"
-            ],
-            "kei": [
-                "S1mmeDisabled",
-                "S1mmeEnabled",
-                "Network Failure/Attach",
-                "Attach Protocol Error CC#111",
-                "TAU Protocol Error CC#111",
-                "Network Failure/HSS",
-                "Default Bearer PGW No Response",
-                "Attach Reject Capacity",
-                "Default Bearer No IP",
-                "Default Bearer No Resources",
-                "Default Bearer Rejected",
-                "PDN Connect Network Failure",
-                "Attach Throttled Dropped"
-            ]
-        },
-        "smsf": {
-            "kpi": [
-                "SMS Service Activate",
-                "UE Service Activation",
-                "UDM UECM Registration",
-                "UDM SDM GET",
-                "UDM SDM Subscribe",
-                "UDM SDM Modify Sub",
-                "SMS Delivery (MO)",
-                "SMS Delivery (MT)",
-                "UE Enable Reachability (MT)",
-                "SMService UpLink SMS",
-                "N1N2 Message Transfer",
-                "OFR SGd MO",
-                "TFR SGd (MT)",
-                "NRF Discovery",
-                "NRF Subscribe",
-                "NRF Heartbeat",
-                "NRF Cache",
-                "UDM UECM DeRegister",
-                "SMS Service Deactivate",
-                "Total Requests (SBI/SGd)"
-            ],
-            "kei": [],
-            "kci": [
-                "Active Context Subs",
-            ]
-        },
-        "vepdg": {
-            "kpi": [
-                "IKEv2_SA (UE<->vEPDG)",
-                "IKEv2_Child_SA (UE<->vEPDG)",
-                "IKEv2 IPSEC Tunnel",
-                "Diameter_DEA/DER (vEPDG<->AAA)",
-                "Diameter AAA/AAR (AAA<->vEPDG)",
-                "Create Session",
-                "Create Bearer",
-                "LTE TO WiFi HO",
-                "WiFi TO LTE HO",
-                "NAPTR Query",
-                "NAPTR A-Query"
-            ],
-            "kci": [
-                "Total PDN Connection",
-                "Total PDN Connection (v4)",
-                "Total PDN Connection (v6)"
-            ],
-            "kei": [
-                "DNS A-Query Retry",
-                "DNS A-Query TimeOut",
-                "DNS NAPTR-Query Retry",
-                "DNS NAPTR-Query TimeOut",
-                "SWm DEA Response CC#3004",
-                "SWm DEA Response CC#4001",
-                "SWm DEA Response CC#5003",
-                "SWm DEA Response CC#5004",
-                "SWm DEA Response CC#5012",
-                "SWm DER Request TimedOut",
-                "Create Session GTP CC#64",
-                "Create Session GTP CC#72",
-                "Create Session GTP CC#73",
-                "Create Session GTP CC#83",
-                "Create Session GTP CC#84",
-                "Create Session Retry",
-                "Create Bearer CC#64",
-                "Create Bearer CC#82",
-                "Create Bearer CC#87",
-                "Create Bearer CC#88",
-            ]
-        }
-    };
-    const keys = Object.keys(data ?? {});
-    const tableHeaders = ['15 min KPI', 'SR%', 'Avg%', 'Attempts', 'Avg Att'];
-    const { tech, filters } = useContext(NodeContext);
-    const getColorPriority = (priority) => {
-        switch (priority) {
-            case 'critical':
-                return '#dc3545';
-            case 'major':
-                return '#ff5722';
-            case 'minor':
-                return '#ffff00';
-            case 'oor':
-                return '#0a58ca';
-            case 'normal':
-                return '#07664d';
+const modalNotes = {
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  minWidth: 400,
+  bgcolor: 'background.paper',
+  border: '2px solid #000',
+  boxShadow: 24,
+  p: 4
+};
 
-            default:
-                return '#000';
-        }
+const Node2 = React.memo(({ node, onClick, style, bgcolor, color, enableContextMenu = true, stats, variation = 'body2', nest }) => {
+  const nodeData = useSelector((state) => state.nodes);
+  const currentDate = moment().tz(timeZone);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [anchorEl, setAnchorEl] = React.useState(null);
+  const [openChart, setOpenChart] = useState(false);
+  const [mouseIsOver, setMouseIsOver] = useState(false);
+  //Notes
+  const [state, setState] = React.useState({
+    openSnackState: false,
+    vertical: 'top',
+    horizontal: 'center',
+  });
+  const { vertical, horizontal, openSnackState } = state;
+  const [snackMessage, setSnackMessage] = useState('');
+  const { syncNotes } = useContext(NodeContext);
+  const [openNotes, setOpenNotes] = useState(false);
+  const [note, setNote] = useState('');
+  const [curr, setCurr] = useState('');
+  const [confirmModal, setConfirmModal] = useState(false);
+  const [openViewNotes, setViewOpenNotes] = useState(false);
+  const [autoDelete, setAutoDelete] = useState(7);
+  // Chart
+  const [chartFilters, setChartFilters] = React.useState({ startDateTime: moment.tz(timeZone).subtract(24, 'hours').format('YYYY-MM-DDTHH:mm:ss'), endDateTime: currentDate.format('YYYY-MM-DDTHH:mm:ss') });
+  const [from, setFrom] = useState(moment.utc(chartFilters.startDateTime).valueOf());
+  const [to, setTo] = useState(moment.utc(chartFilters.endDateTime).valueOf());
+
+  const handlePopoverOpen = (event) => {
+    if (!enableContextMenu) {
+      return;
     }
+    const target = event.currentTarget;
+    setAnchorEl(target);
+  };
 
-    const getCellStyle = (data) => {
-        return {
-            border: '1px solid black',
-            padding: '2px',
-            color: data?.is_active ? getColorPriority(data?.priority) : 'black',
-            fontSize: '12px',
-        };
-    };
-    const getRCStyle = (value) => {
-        var obj = {
-            border: '1px solid black',
-            padding: '2px',
-            fontSize: '12px',
-            textAlign: 'center'
-        };
-        if (isVepdgNode) {
-            obj['color'] = value === 'InService' ? '#07664d' : '#ff0040'
-         } else if (isSmsfNode) {
-            obj['color'] = '#07664d'
+  const handlePopoverClose = () => {
+    setTimeout(() => {
+      if (!mouseIsOver) {
+        setAnchorEl(null);
+      }
+    })
+  };
+
+  const handleMouseEnterPopover = () => {
+    setMouseIsOver(true);
+  };
+
+  const handleMouseLeavePopover = () => {
+    setMouseIsOver(false);
+    setAnchorEl(null);
+  };
+
+  const open = Boolean(anchorEl);
+
+  const handleContextMenu = (event) => {
+    if (!enableContextMenu) {
+      return;
+    }
+    event.preventDefault();
+    setContextMenu(
+      contextMenu === null
+        ? {
+          mouseX: event.clientX - 2,
+          mouseY: event.clientY - 4,
+        }
+        :
+        null,
+    );
+  };
+
+  const handleClose = () => {
+    setContextMenu(null);
+  };
+
+  const getColorPriority = (stats) => {
+    const pr = stats.map(_ => _.priority)
+    const priority = [...new Set(pr)];
+    if (nodeData && nodeData.nest && nodeData.nest[node.host_name] && (nodeData.nest[node.host_name] != 'InService' && nodeData.nest[node.host_name] != 'NOT_FOUND')) {
+      return '#0a58ca';
+    } else {
+      if (priority.length > 0) {
+        if (priority.indexOf('critical') !== -1) {
+          return '#ff0040';
+        } else if (priority.indexOf('major') !== -1) {
+          return '#f2630a';
+        } else if (priority.indexOf('minor') !== -1) {
+          return '#ffc33f';
+        } else if (priority.indexOf('normal') !== -1) {
+          return '#198754';
+        } else if (priority.indexOf('oor') !== -1) {
+          return '#0a58ca';
         } else {
-            obj['color'] = value === '0' ? '#ff0040' : '#07664d'
+          return 'darkgray';
         }
-        return obj;
+      }
     }
+  }
 
-    const getNestStatusStyle = (status) => {
-        return {
-            border: '1px solid black',
-            padding: '2px',
-            color: status !== 'InService' ? '#ff0040' : '#07664d',
-            fontSize: '12px',
-            textAlign: 'center'
-        }
+  const handleChartFilterChange = (event, key) => {
+    setChartFilters({
+      ...chartFilters,
+      [key]: moment(event.target.value).format('YYYY-MM-DDTHH:mm:ss')
+    });
+  }
+
+  const updateGrafana = () => {
+    setFrom(moment.utc(chartFilters.startDateTime).valueOf());
+    setTo(moment.utc(chartFilters.endDateTime).valueOf());
+  }
+
+  // Notes
+  function NameIcons(name) {
+    let formattedName = name;
+    if (!name) {
+      formattedName = 'Default, User';
+    } else if (name === 'Default User') {
+      formattedName = 'Default, User';
     }
-
-    const sort_by_id = (key) => {
-        return function (elem1, elem2) {
-            if (elem1[key] < elem2[key]) {
-                return -1;
-            } else if (elem1[key] > elem2[key]) {
-                return 1;
-            } else {
-                return 0;
-            }
-        };
-    }
-
-    const showTime = (date) => {
-        if (date) {
-            return moment(date).format('DD MMM YYYY HH:mm:ss [GMT]');
-        } else {
-            return '';
-        }
-    }
-
-    const removeDecimal = (text) => {
-        return ~~text
-    }
-
-    const processKPIData = (techType, kpiData) => {
-        const kpiList = hardcodedData[techType]?.kpi || [];
-        const apiKpiData = Array.isArray(kpiData) ? kpiData : [];
-        const mergedData = kpiList.map((kpiName) => {
-            const apikpi = apiKpiData.find(kpi => kpi?.kpi === kpiName);
-            if(apikpi){
-                apikpi.succ = (apikpi.succ === 0) ? 0 : apikpi.succ;
-                apikpi.att = (apikpi.att === "0") ? 0 : apikpi.att;
-            }
-            return apikpi || {
-                kpi: kpiName,
-                succ: null,
-                avg: null,
-                att: null,
-                last_7_att: null
-            };
-        });
-        const remainingApiData = apiKpiData.filter(kpi => {
-            return kpi?.kpi && !kpiList.includes(kpi.kpi);
-        });
-
-        data.kpi = [...mergedData, ...remainingApiData];
-    };
-
-    const processKEIData = (techType, keiData) => {
-        if (isSmsfNode) {
-            return;
-        }
-        const keiList = hardcodedData[techType]?.kei || [];
-
-        const apiKeiData = Array.isArray(keiData) ? keiData : [];
-
-        const mergedData = keiList.map((keiName) => {
-            const apikei = apiKeiData.find(kei => kei?.kpi === keiName);
-            return apikei || {
-                kpi: keiName,
-                att: null,
-                last_7_att: null
-            };
-        });
-
-
-        const remainingApiData = apiKeiData.filter(kei => {
-            return kei?.kpi && !keiList.includes(kei.kpi);
-        });
-
-
-        data.kei = [...mergedData, ...remainingApiData];
-
-    };
-    const processKCIData = (techType, kciData) => {
-        const kciList = hardcodedData[techType]?.kci || [];
-
-        const apiKciData = Array.isArray(kciData) ? kciData : [];
-
-        const mergedData = kciList.map((kciName) => {
-            const apikci = apiKciData.find(kci => kci?.kpi === kciName);
-
-            return apikci || {
-                kpi: kciName,
-                att: null,
-                last_7_att: null
-            };
-        });
-
-
-        const remainingApiData = apiKciData.filter(kci => {
-            return kci?.kpi && !kciList.includes(kci.kpi);
-        });
-
-
-        data.kci = [...mergedData, ...remainingApiData];
-
-    };
-    processKPIData(node.nodetype, data.kpi);
-    processKEIData(node.nodetype, data.kei);
-    processKCIData(node.nodetype, data.kci);
-
-    const { locationMapping } = useContext(NodeContext);
-    const locationDetails = locationMapping[node?.host_name] || {};
-    const { city, omw, state } = locationDetails;
-
-
-    const getKpiTableData = (kpis) => {
-        return Object.values(kpis)?.map((kpi, index) => {
-            return (
-                <>
-                    <TableRow key={'kpi-data-' + index}>
-                        <TableCell style={getCellStyle(kpi)}>{kpi?.kpi}</TableCell>
-                        <TableCell style={kpi?.succ !== null ? getCellStyle(kpi) : styles.tableCell}>{kpi?.succ !== null? kpi.succ : 'null'}</TableCell>
-                        <TableCell style={kpi?.avg !== null ? getCellStyle(kpi) : styles.tableCell}>{kpi?.avg !== null? kpi.avg : 'null'}</TableCell>
-                        <TableCell style={kpi?.att !== null ? getCellStyle(kpi) : styles.tableCell}>{kpi?.att !== null? kpi.att : 'null'}</TableCell>
-                        <TableCell style={styles.tableCell}>{kpi?.last_7_att === null ? 'null':removeDecimal(kpi?.last_7_att)}</TableCell>
-                    </TableRow>
-                </>
-            )
-        })
-    }
-
-    const getTableData = (kcis) => {
-        return Object.values(kcis)?.map((kci, index) => {
-            return (
-                (kci?.kpi !== 'RC_Value') && (kci?.kpi !== 'RC') && (kci?.kpi !== "ModelD") &&
-                <>
-                    <TableRow key={'kci-data-' + index}>
-                        <TableCell key={'kci-data-cell-1' + index} style={getCellStyle(kci)}>{kci?.kpi}</TableCell>
-                        {isSmsfNode && (
-                            <>
-                                <TableCell style={styles.tableCell}></TableCell>
-                                <TableCell style={styles.tableCell}></TableCell>
-                                <TableCell key={'kci-data-cell-3' + index} style={getCellStyle(kci)}>{kci?.att === null? 'null' :  removeDecimal(kci?.att)}</TableCell>
-                                <TableCell key={'kci-data-cell-4' + index} style={getCellStyle(kci)}>{removeDecimal(kci?.last_7_att)}</TableCell>
-                            </>
-                        )}
-
-                        {!isSmsfNode && <TableCell key={'kci-data-cell-2' + index} style={getCellStyle(kci)}>{ kci?.att === null? 'null' : removeDecimal(kci?.att) + ' / ' + removeDecimal(kci?.last_7_att)}</TableCell>}
-                    </TableRow>
-                </>
-            )
-        })
-    }
-
-    function noteInfo(note) {
-        let formattedName = note?.updated_by;
-        const time = moment(note?.updated_at).tz(timeZone).format('MM/DD/YYYY HH:mm');
-        if (!formattedName) {
-            formattedName = 'Default, User';
-        } else if (formattedName === 'Default User') {
-            formattedName = 'Default, User';
-        }
-        let [firstName, lastName] = formattedName.split(', ');
-        let firstLetterFirstName = firstName.charAt(0).toUpperCase();
-        let firstLetterLastName = lastName.charAt(0).toUpperCase();
-
-        return (
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-                <div className="name-icons">
-                    <div title={formattedName} className="icon-small">{firstLetterFirstName}{firstLetterLastName}</div>
-                </div>
-                <div style={{ fontSize: '10px' }}>{time}</div>
-            </div>
-        );
-    }
-
-    const loadTableTop = (
-        <Table style={styles.tableTop}>
-            <TableHead style={styles.tableHead}>
-                <TableRow>
-                    <TableCell style={isSmsfNode ? styles.tableCellTransparentSmsf : styles.tableCellTransparent}>{`Location: ${node?.host_name}/${node?.pool} /${omw || 'N/A'}/${city || 'N/A'},${state || 'N/A'}`}</TableCell>
-                    {isSmsfNode && <TableCell style={styles.tableCellCenteredSmsf}></TableCell>}
-                    <TableCell style={isSmsfNode ? styles.tableCellCenteredSmsf : styles.tableCellCentered}>{isSmsfNode ? "Nrf Support" : node.nodetype === "vepdg" ? "OOR" : "RC"}</TableCell>
-                    <TableCell style={isSmsfNode ? styles.tableCellCenteredSmsf : styles.tableCellCentered}>Nest Status</TableCell>
-                    <TableCell style={isSmsfNode ? styles.tableCellCenteredSmsf : styles.tableCellCentered}>SW Version</TableCell>
-                    {!isSmsfNode && <TableCell style={styles.tableCellCentered}>Build</TableCell>}
-
-                </TableRow>
-            </TableHead>
-            <TableBody>
-                <TableRow>
-                    <TableCell style={styles.tableCell}>{`KPI Interval: ${showTime(Object.values(node?.stats)[0]?.time_value)}`}</TableCell>
-                    {isSmsfNode && <TableCell style={styles.tableCellCentered}></TableCell>}
-                    <TableCell style={getRCStyle(node?.stats?.RC_Value?.att || node?.stats?.OOR?.att || node?.stats?.RC?.att)}>{node.nodetype === "vepdg" ? node?.stats?.OOR?.att || "null" : node?.stats?.ModelD ? (node?.stats?.ModelD.att === "true" ? "true" : "ORR") : node?.stats?.RC_Value?.att || node?.stats?.RC?.att || 0}</TableCell>
-                    <TableCell style={getNestStatusStyle(node?.nestStatus)}>{node?.nestStatus || 'NA'}</TableCell>
-                    <TableCell style={styles.tableCellCentered}>{node?.stats?.releasenum?.sw_version}</TableCell>
-                    {node.nodetype !== "smsf" && <TableCell style={styles.tableCellCentered}>{removeDecimal(node?.stats?.Build?.att)}</TableCell>}
-
-                </TableRow>
-                {/* Club the table with SMSF KPI data */}
-                {
-                    // KPI table header for SMSF
-                    isSmsfNode && (
-                        <TableRow style={styles.tableHead}>
-                            {tableHeaders.map((header, index) => (
-                                <TableCell key={'kpi-header' + index} style={index === 0 ? styles.tableCell : styles.tableCell}>{index === 0 ? '5 min KPI' : header}</TableCell>
-                            ))}
-                        </TableRow>
-                    )
-                }
-                {
-                    // KPI table body for SMSF
-                    isSmsfNode && (
-                        getKpiTableData(data?.kpi)
-
-                    )
-                }
-                {
-                    // KCI table header for SMSF
-                    isSmsfNode && (
-                        <TableRow style={styles.tableHead}>
-                            <TableCell style={styles.tableCell}> 5 min KCI </TableCell>
-                            <TableCell style={styles.tableCell}></TableCell>
-                            <TableCell style={styles.tableCell}></TableCell>
-                            <TableCell style={styles.tableCell}>Current</TableCell>
-                            <TableCell style={styles.tableCell}>Average</TableCell>
-                        </TableRow>
-                    )
-                }
-                {
-                    // KCI table body for SMSF
-                    isSmsfNode && (
-                        getTableData(data?.kci)
-                    )
-                }
-                {
-                    node?.notes?.length > 0 && (
-                        <TableRow>
-                            <TableCell style={styles.tableCellColored}>Latest Note</TableCell>
-                            <TableCell style={styles.tableCell}>{node?.notes?.length > 0 ? node?.notes?.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0]?.notes : ''}</TableCell>
-                            <TableCell style={styles.tableCell}>{node?.notes?.length > 0 ? noteInfo(node?.notes?.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0]) : ''}</TableCell>
-                            {/* <TableCell style={styles.tableCell}>{node?.notes?.length > 0 ? node?.notes[0]?.updated_by : ''}</TableCell> */}
-                        </TableRow>
-                    )
-                }
-            </TableBody>
-        </Table>
-    )
-
-    const loadDefaultTableView = (
-        <Grid container>
-            <Grid item xs>
-                {
-                    data?.kpi && (
-                        <Table style={styles.table}>
-                            <TableHead style={styles.tableHead}>
-                                <TableRow>
-                                    {tableHeaders.map((header, index) => (
-                                        <TableCell key={'kpi-header' + index} style={styles.tableCell}>{isVepdgNode && index === 0 ? '5 min KPI' : header}</TableCell>
-                                    ))}
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {getKpiTableData(data?.kpi)}
-                            </TableBody>
-                        </Table>
-                    )
-                }
-            </Grid>
-            <Grid item xs>
-                {
-                    data?.kci && (
-                        <Table style={styles.tableRight}>
-                            <TableHead style={styles.tableHead}>
-                                <TableRow>
-                                    <TableCell style={styles.tableCellFixed}> {isVepdgNode ? '5 min KCI' : '15 min KCI'} </TableCell>
-                                    <TableCell style={styles.tableCell}>Current/Average </TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {getTableData(data?.kci)}
-                            </TableBody>
-                        </Table>
-                    )
-                }
-                {
-                    data?.kei && (
-                        <Table style={styles.tableRight}>
-                            <TableHead style={styles.tableHead}>
-                                <TableRow>
-                                    <TableCell style={styles.tableCellFixed}> {isVepdgNode ? '5 min KEI' : '15 min KEI'} </TableCell>
-                                    <TableCell style={styles.tableCell}> <span style={{ color: '#d6006e' }}>Current/Average </span>  </TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {getTableData(node.nodetype === 'vepdg' ?  data?.kei.filter(kei =>kei?.kpi !== "OOR"):data?.kei)}
-                            </TableBody>
-                        </Table>
-                    )
-                }
-            </Grid>
-        </Grid>
-    )
+    let [firstName, lastName] = formattedName.split(', ');
+    let firstLetterFirstName = firstName.charAt(0).toUpperCase();
+    let firstLetterLastName = lastName.charAt(0).toUpperCase();
 
     return (
-        <>
-            {/* Table Top */}
-            {loadTableTop}
-            {!isSmsfNode && loadDefaultTableView}
-        </>
+      <div className="name-icons">
+        <div title={formattedName} className="icon">{firstLetterFirstName}{firstLetterLastName}</div>
+      </div>
     );
+  }
+
+  const remainingDays = (date) => {
+    if (date) {
+      const currentDate = moment();
+      const deletionDate = moment(date);
+      const diffInDays = deletionDate.diff(currentDate, 'days');
+      return diffInDays;
+    } else {
+      return 7;
+    }
+  };
+
+  const saveNote = async () => {
+    await axiosClient.post('/api/addNotes', { host_name: node.host_name, notes: note, expiresInDays: autoDelete });
+    syncNotes();
+    setOpenNotes(false);
+  }
+
+  const openSnack = (newState, message = '') => {
+    setSnackMessage(message);
+    setState({ ...newState, openSnackState: true });
+  };
+
+  const closeSnack = () => {
+    setState({ ...state, openSnackState: false });
+  };
+
+  const deleteNote = async (curr) => {
+    await axiosClient.put('/api/deactivateNotes', { host_name: curr.host_name, notes: curr.notes });
+    openSnack({ vertical: 'top', horizontal: 'center' }, 'Note has been deleted successfully!!');
+    syncNotes();
+    setCurr('');
+    setConfirmModal(false);
+    setViewOpenNotes(false);
+  }
+
+  const getNodePanels = () => {
+    if (node.nodetype === 'smf') {
+      return [21,22,23,24]
+    } else if (node.nodetype === 'upf') {
+      // return [25,26,27,28,29,30]
+      return [29,30]
+    } else {
+      return []
+    }
+  }
+
+  return (
+    <>
+      <Snackbar
+        anchorOrigin={{ vertical, horizontal }}
+        open={openSnackState}
+        autoHideDuration={3000}
+        onClose={closeSnack}
+        key={vertical + horizontal}
+        style={{ top: 100 }}
+      >
+        <Alert
+          onClose={closeSnack}
+          severity="success"
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackMessage}
+        </Alert>
+      </Snackbar>
+      <Card style={{
+        ...style,
+        backgroundColor: stats && stats[node.node_name ?? node.host_name] ? getColorPriority(stats[node.node_name ?? node.host_name]) : 'darkgray',
+        color: color || 'white',
+        cursor: 'context-menu'
+      }} onClick={onClick} onContextMenu={handleContextMenu} >
+        <CardContent style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography onMouseEnter={handlePopoverOpen}
+            onMouseLeave={handlePopoverClose} aria-owns={open ? 'mouse-over-popover' : undefined}
+            aria-haspopup="true"
+            style={{ fontSize: variation == 'h6' ? '20px' : 'inherit', fontWeight: variation == 'h6' ? '500' : 'inherit', width: 'auto' }} variant={variation}>{node?.node_name ?? node?.host_name ?? ''}</Typography>
+          {
+            nodeData.notes && nodeData.notes[node.host_name] && nodeData.notes[node.host_name].length > 0 && (
+              <CommentIcon style={{ cursor: 'pointer', color: '#000', fontSize: '16px' }} onClick={() => setViewOpenNotes(true)} />
+            )
+          }
+        </CardContent>
+
+        {
+          enableContextMenu && (
+            <>
+              <Menu
+                open={contextMenu !== null}
+                onClose={handleClose}
+                anchorReference="anchorPosition"
+                anchorPosition={
+                  contextMenu !== null
+                    ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
+                    : undefined
+                }
+              >
+                <MenuItem onClick={() => {
+                  window.open(`https://wasp.eng.t-mobile.com/nodeinfo/${node.host_name?.toUpperCase()}`, '_blank');
+                  handleClose();
+                }}><HistoryIcon style={{ marginRight: '8px', color: "#d6006e" }} /> Node Info</MenuItem>
+                <MenuItem onClick={() => { setOpenChart(true); handleClose(); }}><ShowChartIcon style={{ marginRight: '8px', color: "#d6006e" }} />Charts</MenuItem>
+                <MenuItem onClick={() => { setOpenNotes(true); handleClose(); }}><NoteAddIcon style={{ marginRight: '8px', color: "#d6006e" }} />Add Notes</MenuItem>
+              </Menu>
+
+              <Popover
+                id="mouse-over-popover"
+                open={open}
+                anchorEl={anchorEl}
+                anchorOrigin={{
+                  vertical: 'center',
+                  horizontal: 'left',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'left',
+                }}
+                onClose={handlePopoverClose}
+                disableRestoreFocus
+
+              >
+                <Card onMouseEnter={handleMouseEnterPopover}
+                  onMouseLeave={handleMouseLeavePopover}
+                >
+                  <CardContent style={{ backgroundColor: '#bfab5b',padding:'8px' }}
+                  >
+                    {
+                      stats[node?.host_name] && (
+                        <KPIModalContent2 nest={nest} node={node} data={stats[node?.host_name ?? node?.node_name]} notes={nodeData.notes} isSmf={variation === 'h6' ? true : false} />
+                      )
+                    }
+                    {
+                      !stats[node?.host_name] && (
+                        <Typography variant="h6" sx={{ color: '#d6006e' }}>No Data</Typography>
+                      )
+                    }
+                  </CardContent>
+                </Card>
+              </Popover>
+              <Modal
+                open={openChart}
+                onClose={() => { setOpenChart(false); }}
+                aria-labelledby="chart-modal-title"
+                aria-describedby="chart-modal-description"
+              >
+                <Box sx={modal}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', color: '#d6006e' }}>
+                    <Typography id="chart-modal-title" variant="h6" component="h2">
+                      {node.host_name?.toUpperCase()} - KPI Chart
+                    </Typography>
+
+                    <IconButton sx={{ color: '#d6006e' }} onClick={() => { setOpenChart(false); }}><CloseIcon /></IconButton>
+                  </Box>
+                  <Box sx={{ marginTop: 2, marginBottom: 2, display: 'flex', alignItems: 'center' }}>
+                    <TextField
+                      label="Start Date"
+                      type="datetime-local"
+                      value={chartFilters.startDateTime ? moment(chartFilters.startDateTime).format('YYYY-MM-DDTHH:mm:ss') : ''}
+                      onChange={(event) => handleChartFilterChange(event, 'startDateTime')}
+                      sx={{ marginRight: 1 }}
+                    />
+                    <TextField
+                      label="End Date"
+                      type="datetime-local"
+                      value={chartFilters.endDateTime ? moment(chartFilters.endDateTime).format('YYYY-MM-DDTHH:mm:ss') : ''}
+                      onChange={(event) => handleChartFilterChange(event, 'endDateTime')}
+                      sx={{ marginRight: 1 }}
+                    />
+                    <Button variant="contained" color="primary" onClick={updateGrafana}>Update Chart</Button>
+                  </Box>
+                  {from && to &&
+                    // <iframe
+                    //   src={`https://grafana.tools.nsds.t-mobile.com/d-solo/ZB5uWsLMk/national-heatmap?orgId=1&var-measurement=${node?.nodetype}&var-poolname=${node?.pool}&var-nodename=${node?.host_name}&from=${from}&to=${to}&panelId=${node?.nodetype === 'nrf' ? 85 : 833}&theme=light`}
+                    //   style={{ width: '100%', height: '350px', border: 'none' }}
+                    //   frameBorder="0"
+                    // ></iframe>
+                    <Grid container rowSpacing={1} columnSpacing={{ xs: 1, sm: 2, md: 3 }}>
+                      {getNodePanels().map(panel =>
+                        (
+                          <Grid item xs={6}>
+                            <iframe
+                              src={node.nodetype === 'upf'
+                                ? `https://grafana.tools.nsds.t-mobile.com/d-solo/a3665c8f-4952-46f3-8762-63c11990609b/heatmapnewgrafana?orgId=1&var-measurementupf=${node?.nodetype}&var-poolnameupf=${node?.pool}&var-nodenameupf=${node?.host_name}&from=${from}&to=${to}&panelId=${panel}&theme=light`
+                                : `https://grafana.tools.nsds.t-mobile.com/d-solo/a3665c8f-4952-46f3-8762-63c11990609b/heatmapnewgrafana?orgId=1&var-measurement=${node?.nodetype}&var-poolname=${node?.pool}&var-nodename=${node?.host_name}&from=${from}&to=${to}&panelId=${panel}&theme=light`
+ }
+                              style={{ width: '100%', height: '350px', border: 'none' }}
+                              frameBorder="0"
+                            ></iframe>
+                          </Grid>
+                        )
+                      )}
+                    </Grid>
+                  }
+                </Box>
+              </Modal>
+              <Modal
+                open={openNotes}
+                onClose={() => { setOpenNotes(false); }}
+                aria-labelledby="notes-modal-title"
+                aria-describedby="notes-modal-description"
+              >
+                <Box sx={modalNotes}>
+                  <Typography sx={{ color: '#d6006e' }} id="notes-modal-title" variant="h6" component="h2">
+                    Add Notes for {node.host_name?.toUpperCase()}
+                  </Typography>
+                  <Input id="notes" aria-describedby="notes" label="Notes" multiline sx={{ width: '100%', marginBottom: '16px' }} onChange={(e) => { setNote(e.target.value) }} fullWidth />
+                  <FormControl sx={{ marginTop: '8px', width: '32%' }}>
+                    <InputLabel id="auto-delete-label">Auto Delete</InputLabel>
+                    <Select
+                      labelId="auto-delete-label"
+                      id="auto-delete"
+                      value={autoDelete}
+                      onChange={(e) => setAutoDelete(e.target.value)}
+                    >
+                      <MenuItem value={1}>1 day</MenuItem>
+                      <MenuItem value={2}>2 days</MenuItem>
+                      <MenuItem value={3}>3 days</MenuItem>
+                      <MenuItem value={4}>4 days</MenuItem>
+                      <MenuItem value={5}>5 days</MenuItem>
+                      <MenuItem value={6}>6 days</MenuItem>
+                      <MenuItem value={7}>7 days</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <Button sx={{ marginTop: '8px', marginLeft: '8px', height: '56px', width: '32%' }} variant="contained" onClick={() => { saveNote() }}>Submit</Button>
+                  <Button sx={{ marginTop: '8px', marginLeft: '8px', height: '56px', width: '32%' }} variant="outlined" onClick={() => { setOpenNotes(false); }}>Cancel</Button>
+                </Box>
+              </Modal>
+              <Modal
+                open={confirmModal}
+                onClose={() => { setConfirmModal(false); }}
+                aria-labelledby="notes-confirm-modal-title"
+                aria-describedby="notes-confirm-modal-description"
+              >
+                <Box sx={modalNotes}>
+                  <Typography sx={{ color: '#d6006e' }} id="notes-confirm-modal-title" variant="h6" component="h2">
+                    Confirm deleting the Note!
+                  </Typography>
+                  <Button sx={{ marginTop: '8px' }} variant="contained" onClick={() => { deleteNote(curr); }}>Confirm</Button>
+                  <Button sx={{ marginTop: '8px', marginLeft: '8px' }} variant="outlined" onClick={() => { setConfirmModal(false); }}>Cancel</Button>
+                </Box>
+              </Modal>
+              <Modal
+                open={openViewNotes}
+                onClose={() => { setViewOpenNotes(false); }}
+                aria-labelledby="notes-modal-title"
+                aria-describedby="notes-modal-description"
+              >
+                <Box sx={modalNotes}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+                    <Typography sx={{ color: '#d6006e' }} id="notes-modal-title" variant="h6" component="h2">
+                      {node.host_name?.toUpperCase()} Notes
+                    </Typography>
+                    <IconButton sx={{ color: '#d6006e' }} onClick={() => { setViewOpenNotes(false); }}><CloseIcon /></IconButton>
+                  </div>
+                  {
+                    nodeData.notes && nodeData.notes[node.host_name] && (
+                      nodeData.notes[node.host_name].map((note, index) => (
+                        <div style={{ margin: '8px 0', border: '1px solid #d6006e', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', }} key={index}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            {NameIcons(note?.updated_by)}
+                            <Box>
+                              <Typography sx={{ fontSize: '24px' }} id="notes-modal-title" variant="body">
+                                {note.notes}
+                              </Typography>
+                              <Typography sx={{ fontSize: '12px' }}>{new Date(note.updated_at).toLocaleDateString()}</Typography>
+                            </Box>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <AutoDeleteIcon sx={{ marginRight: '8px' }} />{remainingDays(note?.expires_at) + 1}
+                            <IconButton sx={{ color: '#d6006e', marginLeft: '8px' }} onClick={() => { setCurr(note); setConfirmModal(true); }}><DeleteIcon /></IconButton>
+                          </Box>
+                        </div>
+                      ))
+                    )
+                  }
+                </Box>
+              </Modal>
+            </>
+          )
+        }
+      </Card>
+    </>
+  );
 });
 
-export default KPIModalContent;
+export default Node2;
