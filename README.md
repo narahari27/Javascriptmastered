@@ -1,455 +1,1008 @@
-import React, { useContext } from 'react';
-import { Table, TableHead, TableBody, TableRow, TableCell, Box, Typography, Grid } from '@mui/material';
-import moment from 'moment-timezone';
-import { NodeContext } from '../NodeContext';
+import React, { useContext, useEffect, useState } from "react";
+import { useSelector, useDispatch } from "react-redux";
+import { startPolling } from "../polling";
+import { store } from "../store";
+import { setFilters as setFilters2, resetFilters as resetFilters2, setSearch as setSearch2, setPriorityFilter as setPriorityFilter2, setNestData } from "../reducers/nodeSlice";
+import { CircularProgress, Grid, Stack, Checkbox, Button } from "@mui/material";
+import { NodeContext } from "../NodeContext";
+import Box from "@mui/material/Box";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import FormControl from "@mui/material/FormControl";
+import Select, { SelectChangeEvent } from "@mui/material/Select";
+import SyncIcon from "@mui/icons-material/Sync";
+import IconButton from "@mui/material/IconButton";
+import SearchIcon from "@mui/icons-material/Search";
+import TextField from "@mui/material/TextField";
+import InputAdornment from "@mui/material/InputAdornment";
+import { styled } from "@mui/material/styles";
+import FormGroup from "@mui/material/FormGroup";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Switch from "@mui/material/Switch";
+import Typography from "@mui/material/Typography";
+import SquareIcon from "@mui/icons-material/Square";
+import ViewModuleIcon from "@mui/icons-material/ViewModule";
+import AppsIcon from "@mui/icons-material/Apps";
+import Snackbar from "@mui/material/Snackbar";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Paper,
+} from "@mui/material";
+import EngineeringIcon from "@mui/icons-material/Engineering";
+import Alert from "@mui/material/Alert";
+import ZoomInIcon from "@mui/icons-material/ZoomIn";
+import ZoomOutIcon from "@mui/icons-material/ZoomOut";
 
-const timeZone = 'UTC';
+import NodeGroup from "./NodeGroup";
+import Notifications from "./Notifications";
+import Region from "./Region";
+import Region2 from "./Region2";
+import { CheckBox, Sync } from "@mui/icons-material";
 
 const styles = {
-    tableTop: {
-        borderCollapse: 'collapse',
-        border: '1px solid black',
-        width: 750,
-    },
-    table: {
-        borderCollapse: 'collapse',
-        border: '1px solid black',
-        width: 750,
-    },
-    tableRight: {
-        borderCollapse: 'collapse',
-        border: '1px solid black',
-        width: 750,
-    },
-    tableHead: {
-        backgroundColor: '#d6006e',
-        color: '#fff'
-    },
-    tableCell: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'inherit',
-        fontSize: '12px',
-    },
-    tableCellCentered: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'inherit',
-        fontSize: '12px',
-        textAlign: 'center'
-    },
-    tableCellTransparent: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'black',
-        fontSize: '12px',
-        backgroundColor: '#bfab5b',
-        width: 430,
-    },
-    tableCellColored: {
-        border: '1px solid black',
-        padding: '2px',
-        backgroundColor: '#d6006e',
-        color: 'white',
-        fontSize: '12px',
-    },
-    tableCellFixed: {
-        border: '1px solid black',
-        padding: '2px',
-        color: 'inherit',
-        fontSize: '12px',
-        width: 150,
-    },
+  table: {
+    borderCollapse: "collapse",
+    border: "1px solid #e0e0e0",
+    minWidth: 400,
+  },
+  tableHead: {
+    backgroundColor: "#d6006e",
+    color: "#fff",
+  },
+  tableCell: {
+    border: "1px solid #e0e0e0",
+    padding: "2px",
+    color: "inherit",
+    fontSize: "12px",
+  },
 };
 
-const CombiKPIModalContent = React.memo(({ node, data }) => {
-    const keys = Object.keys(data ?? {});
-    const { locationMapping } = useContext(NodeContext);
-    const locationDetails = locationMapping[node?.host_name] || {};
-    const { city, omw, state } = locationDetails;
-    const hardcodedData = {
-        "nrf": {
-            "kpi": [
-                'Heartbeat',
-                'Discovery',
-                'Discovery Client',
-                'Discovery EmptyProfile',
-                'Register',
-                'De-Register',
-                'NF Update',
-                'Notify',
-                'Subscribe',
-                'Subscribe Update',
-                'Management TPS',
-                'Discovery TPS',
-            ],
-            "kci": [
-                'Registered',
-                'Suspended',
-                'Undiscoverable',
-                'Subscriptions',
-            ],
+const IOSSwitch = styled((props) => (
+  <Switch focusVisibleClassName=".Mui-focusVisible" disableRipple {...props} />
+))(({ theme }) => ({
+  width: 42,
+  height: 26,
+  padding: 0,
+  "& .MuiSwitch-switchBase": {
+    padding: 0,
+    margin: 2,
+    transitionDuration: "300ms",
+    "&.Mui-checked": {
+      transform: "translateX(16px)",
+      color: "#fff",
+      "& + .MuiSwitch-track": {
+        backgroundColor:
+          theme.palette.mode === "dark" ? "#2ECA45" : "rgb(214, 0, 110)",
+        opacity: 1,
+        border: 0,
+      },
+      "&.Mui-disabled + .MuiSwitch-track": {
+        opacity: 0.5,
+      },
+    },
+    "&.Mui-focusVisible .MuiSwitch-thumb": {
+      color: "#33cf4d",
+      border: "6px solid #fff",
+    },
+    "&.Mui-disabled .MuiSwitch-thumb": {
+      color:
+        theme.palette.mode === "light"
+          ? theme.palette.grey[100]
+          : theme.palette.grey[600],
+    },
+    "&.Mui-disabled + .MuiSwitch-track": {
+      opacity: theme.palette.mode === "light" ? 0.7 : 0.3,
+    },
+  },
+  "& .MuiSwitch-thumb": {
+    boxSizing: "border-box",
+    width: 22,
+    height: 22,
+  },
+  "& .MuiSwitch-track": {
+    borderRadius: 26 / 2,
+    backgroundColor:
+      theme.palette.mode === "light" ? "rgb(214, 0, 110)" : "#39393D",
+    opacity: 1,
+    transition: theme.transitions.create(["background-color"], {
+      duration: 500,
+    }),
+  },
+}));
+
+// const Loader = ({isLoading})=>{
+//   if(!isLoading) return null;
+//   return(
+//     <Box sx={{
+//       position:'fixed',
+//       top:0,
+//       left:0,
+//       width:'100%',
+//       height:'100%',
+//       backgroundColor:'rgba(255,255,255,0.8)',
+//       display:'flex',
+//       justifyContent:'center',
+//       alignItems:'center',
+//       zIndex:9999,
+//     }}>
+//       <CircularProgress size={80}/>
+//     </Box>
+//   )
+// };
+
+const DashBoard = () => {
+  const [state, setState] = React.useState({
+    openSnackState: false,
+    vertical: "top",
+    horizontal: "right",
+  });
+  const dispatch = useDispatch();
+  const nodesData = useSelector((state) => state.nodes)
+  const { vertical, horizontal, openSnackState } = state;
+  const {
+    nodes,
+    basefilters,
+    filters,
+    setFilters,
+    filteredNodes,
+    hasFilters,
+    resetFilters,
+    setSearch,
+    dataLoading,
+    alerts,
+    notifications,
+    error,
+    setPriorityFilter,
+    setDegradedNodes,
+    degradedNodes,
+    priorityFilter,
+    upfView,
+    toggleUPFView,
+    toggleOOR,
+    nestInfo,
+    toggleLoader,
+    isLoading,
+    setSearchTerm,
+    searchTerm,
+    techTypePools
+  } = useContext(NodeContext);
+  const [view, setView] = React.useState(
+    localStorage.getItem("view")
+      ? localStorage.getItem("view") === "true"
+        ? true
+        : false
+      : false
+  );
+
+  // const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm2, setSearchTerm2] = useState("");
+  const [scale, setScale] = useState(1);
+
+  const handleResetFilters = ()=>{
+    setSearchTerm2("");
+    dispatch(setSearch2({search:"",selected:nodesData.filters,data:nodesData.data}));
+    dispatch(resetFilters2(nodesData.data));
+  }
+  const handleZoomIn = () => {
+    if (scale < 1) {
+      setScale(scale + 0.1);
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (scale > 0.2) {
+      setScale(scale - 0.1);
+    }
+  };
+
+  const handleChange = (event) => {
+    setSearchTerm(event.target.value);
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    setSearch(searchTerm);
+  };
+
+  const openSnack = (newState, message = "") => {
+    setState({ ...newState, openSnackState: true });
+
+    setTimeout(() => {
+      closeSnack();
+    }, 10000);
+  };
+
+  React.useEffect(() => {
+    if (alerts.filter((x) => x.priority !== "normal").length > 0) {
+      openSnack({ vertical: "top", horizontal: "right" });
+    } else {
+      closeSnack();
+    }
+  }, [alerts]);
+
+  const closeSnack = () => {
+    setState({ ...state, openSnackState: false });
+  };
+
+  useEffect(() => {
+    setSelectedFilters(priorityFilter);
+  }, [priorityFilter]);
+
+  useEffect(() => {
+    if(upfView){
+      startPolling(store);
+    }
+  }, [upfView]);
+
+  const getColorPriority = (priority) => {
+    switch (priority) {
+      case "critical":
+        return "#ff0040";
+      case "major":
+        return "#f2630a";
+      case "minor":
+        return "#ffc33f";
+      case "oor":
+        return "#0a58ca";
+      case "normal":
+        return "#198754";
+
+      default:
+        return "#000";
+    }
+  };
+
+  const getCellStyle = (priority) => {
+    return {
+      border: "1px solid #e0e0e0",
+      padding: "2px",
+      color: getColorPriority(priority),
+      fontSize: "12px",
+    };
+  };
+
+  const [selectedFilters, setSelectedFilters] = useState(priorityFilter);
+  const [selectedFilters2, setSelectedFilters2] = useState(nodesData.priorityFilters);
+
+  const handleFilterToggle = (value, e) => {
+    if (selectedFilters.includes(value)) {
+      setSelectedFilters(selectedFilters.filter((filter) => filter !== value));
+      setPriorityFilter(selectedFilters.filter((filter) => filter !== value));
+    } else {
+      setSelectedFilters([...selectedFilters, value]);
+      setPriorityFilter([...selectedFilters, value]);
+    }
+  };
+
+  const handleFilterToggle2 = (value, e) => {
+    if (selectedFilters2.includes(value)) {
+      setSelectedFilters2(selectedFilters2.filter((filter) => filter !== value));
+      dispatch(setPriorityFilter2({filters: selectedFilters2.filter((filter) => filter !== value), current: nodesData}));
+    } else {
+      setSelectedFilters2([...selectedFilters2, value]);
+      dispatch(setPriorityFilter2({filters: [...selectedFilters2, value], current: nodesData}));
+    }
+  };
+
+  useEffect(() => {
+    if (Object.keys(nestInfo).length > 0) {
+      dispatch(setNestData({nest: nestInfo, current: nodesData}));
+    }
+  }, [nestInfo]);
+  
+  //Below code for filtering pools dropdown based on techtype
+  // console.log("current nodes structure:",nodes);
+  // console.log("current filters:",filters);
+  // console.log("current base filters:",basefilters);
+  const[availablePools, setAvailablePools] = useState(basefilters.pools || []);
+  useEffect(()=>{
+    // console.log("Techtype changed to:",filters.nodetype);
+    if(filters.nodetype !== 'All'){
+      const poolsWithSelectedTech = [];
+      Object.entries(nodes).forEach(([poolName,nodesInPool])=>{
+        if(Array.isArray(nodesInPool)){
+          const hasTechType = nodesInPool.some(node=>node.nodetype === filters.nodetype);
+        if(hasTechType){
+          poolsWithSelectedTech.push(poolName);
+        }
+        }
         
-            "kei": [
-                'Http Error Resp #400',
-                'Http Error Resp #403',
-                'Http Error Resp #404',
-                'Http Error Resp #408',
-                'Http Error Resp #4XX',
-                'Http Error Resp #500',
-                'Http Error Resp #5xx',
-                'Http Error Resp #Other',
-            ]
-        }
+      });
+      // console.log("found pools with tech type:",poolsWithSelectedTech);
+      setAvailablePools(['All',...poolsWithSelectedTech]);
+    }else{
+      setAvailablePools(basefilters.pools || []);
     }
+      
+  },[filters.nodetype,nodes,basefilters.pools]);
 
-    const getColorPriority = (priority) => {
-        switch (priority) {
-            case 'critical':
-                return '#dc3545';
-            case 'major':
-                return '#ff5722';
-            case 'minor':
-                return '#ffff00';
-            case 'oor':
-                return '#0a58ca';
-            case 'normal':
-                return '#07664d';
 
-            default:
-                return '#000';
-        }
-    }
-
-    const getCellStyle = (data) => {
-        return {
-            border: '1px solid black',
-            padding: '2px',
-            color: data?.is_active ? getColorPriority(data?.priority) : 'black',
-            fontSize: '12px',
-        };
-    };
-
-    const getNtwkStatusStyle = (status) => {
-        return {
-            border: '1px solid black',
-            padding: '2px',
-            color: status !== 'ON' ? '#ff0040' : '#07664d',
-            fontSize: '12px',
-            textAlign: 'center'
-        }
-    }
-
-    const getNestStatusStyle = (status) => {
-        return {
-            border: '1px solid black',
-            padding: '2px',
-            color: status !== 'InService' ? '#ff0040' : '#07664d',
-            fontSize: '12px',
-            textAlign: 'center'
-        }
-    }
-
-    const sort_by_id = (key) => {
-        return function (elem1, elem2) {
-            if (elem1[key] < elem2[key]) {
-                return -1;
-            } else if (elem1[key] > elem2[key]) {
-                return 1;
-            } else {
-                return 0;
-            }
-        };
-    }
-
-    const showTime = (date) => {
-        if (date) {
-            return moment(date).format('DD MMM YYYY HH:mm:ss [GMT]');
-        } else {
-            return '';
-        }
-    }
-
-    const removeDecimal = (text) => {
-        return ~~text
-    }
-
-    function findValueInObject(obj, value) {
-        // Iterate through the object's keys
-        for (let key in obj) {
-            // Check if the value matches the current key's value
-            if (obj[key] === value) {
-                return true;
-            }
-
-            // If the value is an object, recursively search in it
-            if (typeof obj[key] === 'object' && obj[key] !== null) {
-                if (findValueInObject(obj[key], value)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    const processKPIData = (techType, kpiData) => {
-        const kpiList = hardcodedData[techType]?.kpi || [];
-        const apiKpiData = Array.isArray(kpiData) ? kpiData : [];
-        const mergedData = kpiList.map((kpiName) => {
-            // Find the matching item in apiKpiData
-            const apikpi = apiKpiData.find((item) => findValueInObject(item, kpiName));
-
-            // let kpiHeaders = [];
-            // if (techType === "nrf") {
-              let kpiHeaders = ['NRD', 'AMF', 'CHF', 'NRF', 'PCF', "SMF"]
-            // }
-            let defaultKpiObj = { kpi: kpiName };
-            kpiHeaders.map((header) => {
-                defaultKpiObj[header] = {
-                    kpi: kpiName,
-                    succ: null,
-                    avg: null,
-                    att: null,
-                    last_7_att: null
-                }
-            });
-
-            // If a match was found, return the found object; otherwise, return a default object
-            return apikpi ? apikpi : defaultKpiObj;
-            // return apikpi ? Object.values(apikpi) : Object.values(defaultKpiObj);
-
-        });
-
-        const remainingApiData = apiKpiData.filter((kpi, ki) => {
-            return Object.values(kpi)?.kpi && !kpiList.includes(Object.values(kpi).kpi);
-        });
-
-        // Combine the merged data with the remaining API data
-        data.kpi = [...mergedData, ...remainingApiData]
-        data.kpiHeaders = ['NRD', 'AMF', 'CHF', 'NRF', 'PCF', "SMF"]
-    };
-
-    const processKEIData = (techType, keiData) => {
-        const kpiList = hardcodedData[techType]?.kei || [];
-        const apiKeiData = Array.isArray(keiData) ? keiData : [];
-        const mergedData = kpiList.map((keiName) => {
-            // Find the matching item in apiKpiData
-            const apikpi = apiKeiData.find((item) => findValueInObject(item, keiName));
-
-            // let kpiHeaders = [];
-            // if (techType === "nrf") {
-              let  kpiHeaders = ['NRD', 'AMF', 'CHF', 'NRF', 'PCF', "SMF"]
-            // }
-            let defaultKpiObj = { kpi: keiName };
-            kpiHeaders.map((header) => {
-                defaultKpiObj[header] = {
-                    kpi: keiName,
-                    att: null,
-                    last_7_att: null
-                }
-            });
-
-            // If a match was found, return the found object; otherwise, return a default object
-            return apikpi ? apikpi : defaultKpiObj;
-
-        });
-
-        const remainingApiData = apiKeiData.filter((kpi, ki) => {
-            return Object.values(kpi)?.kpi && !kpiList.includes(Object.values(kpi).kpi);
-        });
-
-        // Combine the merged data with the remaining API data
-        data.kei = [...mergedData, ...remainingApiData]
-        data.kpiHeaders = ['NRD', 'AMF', 'CHF', 'NRF', 'PCF', "SMF"]
-
-    };
-
-    const processKCIData = (techType, kciData) => {
-        const kpiList = hardcodedData[techType]?.kci || [];
-        const apiKciData = Array.isArray(kciData) ? kciData : [];
-        const mergedData = kpiList.map((kciName) => {
-            // Find the matching item in apiKpiData
-            const apikpi = apiKciData.find((item) => findValueInObject(item, kciName));
-
-            // let kpiHeaders = [];
-            // if (techType === "nrf") {
-               let kpiHeaders = ['NRD', 'AMF', 'CHF', 'NRF', 'PCF', "SMF"]
-            // }
-            let defaultKpiObj = { kpi: kciName };
-            kpiHeaders.map((header) => {
-                defaultKpiObj[header] = {
-                    kpi: kciName,
-                    att: null,
-                    last_7_att: null
-                }
-            });
-
-            // If a match was found, return the found object; otherwise, return a default object
-            return apikpi ? apikpi : defaultKpiObj;
-
-        });
-
-        const remainingApiData = apiKciData.filter((kpi, ki) => {
-            return Object.values(kpi)?.kpi && !kpiList.includes(Object.values(kpi).kpi);
-        });
-
-        // Combine the merged data with the remaining API data
-        data.kci = [...mergedData, ...remainingApiData]
-        data.kpiHeaders = ['NRD', 'AMF', 'CHF', 'NRF', 'PCF', "SMF"]
-    };
-
-    processKPIData(node?.nodetype, data?.kpi);
-    processKEIData(node?.nodetype, data?.kei);
-    processKCIData(node?.nodetype, data?.kci);
-
-    const getKpiTableData = (kpis) => {
-        return Object.values(kpis)?.map((kpi, index) => {
-            return (
-                <>
-                    <TableRow key={'kpi-data-' + index}>
-                        <TableCell style={getCellStyle(Object.values(kpis)[index]['NRD'])}>{kpi?.kpi}</TableCell>
-                        {
-                            node?.kpiHeaders?.map((type, index) => {
-                                const dynamicStyle = (type === 'NRD')? getCellStyle(kpi[type]):styles.tableCell
-                                return (
-                                    <TableCell key={`${kpi?.kpi}-type-${index}`} style={dynamicStyle}>{`${kpi[type]?.succ || 'null'} / ${kpi[type]?.att || 'null'}`}</TableCell>
-                                )
-                            })
-                        }
-                    </TableRow>
-                </>
-            )
-        })
-    }
-
-    const getTableData = (kcis) => {
-        return Object.values(kcis)?.map((kci, index) => {
-            return (
-                <>
-                    <TableRow key={'kci-data-' + index}>
-                        <TableCell style={getCellStyle(Object.values(kcis)[index]['NRD'])}>{kci?.kpi}</TableCell>
-                        {
-                            node?.kpiHeaders?.map((type, index) => {
-                                const custmStyle = (type === 'NRD')? getCellStyle(kci[type]):styles.tableCell
-                                return (
-                                    <TableCell key={`${kci?.kpi}-type-${index}`} style={custmStyle}>{ kci[type]?.att=== null? 'null' : removeDecimal(kci[type]?.att )}</TableCell>
-                                )
-                            })
-                        }
-                    </TableRow>
-                </>
-            )
-        })
-    }
-
-    function noteInfo(note) {
-        let formattedName = note?.updated_by;
-        const time = moment(note?.updated_at).tz(timeZone).format('MM/DD/YYYY HH:mm');
-        if (!formattedName) {
-            formattedName = 'Default, User';
-        } else if (formattedName === 'Default User') {
-            formattedName = 'Default, User';
-        }
-        let [firstName, lastName] = formattedName.split(', ');
-        let firstLetterFirstName = firstName.charAt(0).toUpperCase();
-        let firstLetterLastName = lastName.charAt(0).toUpperCase();
-
-        return (
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-                <div className="name-icons">
-                    <div title={formattedName} className="icon-small">{firstLetterFirstName}{firstLetterLastName}</div>
-                </div>
-                <div style={{ fontSize: '10px' }}>{time}</div>
-            </div>
-        );
-    }
-    if(node && Array.isArray(node.kpiHeaders)) {
-        if (node.pool != "G") {
-            node.kpiHeaders = ['NRD', 'AMF', 'CHF', 'NRF', 'PCF', "SMF"]
-        }
-        else {node.kpiHeaders = ['NRD', 'AUSF', 'BSF', 'GMLC', 'LMF', 'NEF', 'NRF', 'SCP', 'SMSF', 'UDM']}
-    }
-    return (
+  const layout = () => {
+    if (error) {
+      return (
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "start",
+            alignItems: "center",
+            height: "100vh",
+            flexDirection: "column",
+          }}
+        >
+          <Typography variant="h4" component="h1" align="center">
+            <EngineeringIcon
+              style={{ width: "100px", height: "100px", color: "#d6006e" }}
+            />
+          </Typography>
+          <Typography variant="h4" component="h1" align="center">
+            Site Maintenance In Progress
+          </Typography>
+        </Box>
+      );
+    } else {
+      return (
         <>
-            <Table style={styles.tableTop}>
-                <TableHead style={styles.tableHead}>
-                    <TableRow>
-                        <TableCell style={styles.tableCellTransparent}>{`Location: ${node?.host_name}/${node?.pool} /${omw || 'N/A'}/${city || 'N/A'},${state || 'N/A'}`}</TableCell>
-                        <TableCell style={styles.tableCellCentered}>Network Check</TableCell>
-                        <TableCell style={styles.tableCellCentered}>Nest Status</TableCell>
-                        <TableCell style={styles.tableCellCentered}>SW Version</TableCell>
-                    </TableRow>
-                </TableHead>
-                <TableBody>
-                    <TableRow>
-                        <TableCell style={styles.tableCell}>{`KPI Interval: ${showTime(Object.values(node?.stats)[0]['NRD']?.time_value)}`}</TableCell>
-                        <TableCell style={getNtwkStatusStyle(node?.ntwCheck)}>{node?.ntwCheck}</TableCell>
-                        <TableCell style={getNestStatusStyle(node?.nestStatus)}>{node?.nestStatus || 'NA'}</TableCell>
-                        <TableCell style={styles.tableCellCentered}>{node?.swVersion}</TableCell>
-                    </TableRow>
-                    {
-                        node?.notes?.length > 0 && (
-                            <TableRow>
-                                <TableCell style={styles.tableCellColored}>Latest Note</TableCell>
-                                <TableCell style={styles.tableCell}>{node?.notes?.length > 0 ? node?.notes?.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0]?.notes : ''}</TableCell>
-                                <TableCell style={styles.tableCell}>{node?.notes?.length > 0 ? noteInfo(node?.notes?.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0]) : ''}</TableCell>
-                                {/* <TableCell style={styles.tableCell}>{node?.notes?.length > 0 ? node?.notes[0]?.updated_by : ''}</TableCell> */}
-                            </TableRow>
-                        )
-                    }
-                </TableBody>
-            </Table>
-
-            <Grid container>
-                <Grid item>
-                    <Table style={styles.table}>
-                        <TableHead style={styles.tableHead}>
-                            <TableRow>
-                                <TableCell style={styles.tableCellFixed}> KPI/NFType SR%/Att </TableCell>
-                                {node?.kpiHeaders.map((header, index) => (
-                                    <TableCell key={'kpi-header' + index} style={styles.tableCell}>{header}</TableCell>
-                                ))}
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {
-                                data?.kpi && (
-                                    <>{getKpiTableData(data?.kpi)}</>
-                                )}
-                            <TableRow>
-                                <TableHead style={styles.tableHead}>
-                                    <TableCell style={styles.tableCellFixed}> KCI/NFType </TableCell>
-
-                                </TableHead>
-                                {node?.kpiHeaders.map((header, index) => (
-                                    <TableCell key={'kci-header' + index} style={styles.tableCell}></TableCell>
-                                ))}
-                            </TableRow>
-
-                            {
-                                data?.kci && (
-                                    <>{getTableData(data?.kci)}</>
-                                )
-                            }
-                            <TableRow>
-                                <TableHead style={styles.tableHead}>
-                                    <TableCell style={styles.tableCellFixed}> KEI/Http Resp </TableCell>
-                                </TableHead>
-                                {node?.kpiHeaders.map((header, index) => (
-                                    <TableCell key={'kei-header' + index} style={styles.tableCell}></TableCell>
-                                ))}
-                            </TableRow>
-                            {
-                                data?.kei && (
-                                    <>{getTableData(data?.kei)}</>
-                                )
-                            }
-                        </TableBody>
-                    </Table>
+          {notifications ? (
+            <Notifications />
+          ) : (
+            <>
+              <Grid
+                container
+                direction="row"
+                sx={{
+                  marginBottom: "24px",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Grid item container xs={6}>
+                  <Box sx={{ minWidth: 200, marginRight: "24px" }}>
+                    <FormControl fullWidth disabled ={dataLoading}>
+                      <InputLabel id="nodetype-label">Tech Type</InputLabel>
+                      <Select
+                        labelid="nodetype-label"
+                        id="teah_type"
+                        value={filters.nodetype}
+                        label="Tech Type"
+                        onChange={(e) => {
+                          setFilters({
+                            ...filters,
+                            nodetype: e?.target?.value,
+                          });
+                        }}
+                      >
+                        {basefilters.nodetype?.sort()?.map((ttype) => (
+                          <MenuItem key={ttype} value={ttype}>
+                            {ttype?.toUpperCase()}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ minWidth: 200, marginRight: "5px" }}>
+                    <FormControl fullWidth disabled ={dataLoading}>
+                      <InputLabel id="pool-label">Pool</InputLabel>
+                      <Select
+                        labelid="pool-label"
+                        id="pool"
+                        value={filters.pools}
+                        label="Pool"
+                        onChange={(e) => {
+                          setFilters({ ...filters, pools: e?.target?.value });
+                        }}
+                      >
+                        {(availablePools.length>0 ? availablePools:['All']).sort()?.map((pool) => (
+                          <MenuItem key={pool} value={pool}>
+                            {pool?.toUpperCase()}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center" }}>
+                    <IconButton onClick={resetFilters} aria-label="refresh">
+                      <SyncIcon />
+                    </IconButton>
+                  </Box>
+                  <Box sx={{ minWidth: 100, marginRight: "12px" }}>
+                    <FormControl fullWidth >
+                      {/* <InputLabel id="search-label">Search</InputLabel> */}
+                      <TextField disabled ={dataLoading}
+                        labelid="search-label"
+                        variant="outlined"
+                        label="Search"
+                        value={searchTerm}
+                        onChange={handleChange}
+                        onKeyUp={(e) => {
+                          if (e.key === "Enter") {
+                            handleSubmit(e);
+                          }
+                        }}
+                        sx={{ mr: 1, flex: 1 }}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={handleSubmit}
+                                sx={{ p: "10px" }}
+                                aria-label="search"
+                              >
+                                <SearchIcon />
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </FormControl>
+                  </Box>
                 </Grid>
-            </Grid>
-        </>
-    );
-});
 
-export default CombiKPIModalContent;
+                <Stack xs={4} direction="row" spacing={10} alignItems="center">
+                  <Box sx={{display: 'flex', flexDirection: 'row', gap: '4px'}}>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <ViewModuleIcon
+                        sx={{ color: !view ? "rgb(214, 0, 110)" : "#000" }}
+                      />
+                      <Typography>
+                        Pool View
+                      </Typography>
+                    </Box>
+                    <FormControlLabel
+                      style={{marginLeft: 0, marginRight: 0}}
+                      control={
+                        <IOSSwitch
+                          sx={{ m: 1 }}
+                          checked={view}
+                          onChange={(e) => {
+                            localStorage.setItem("view", e.target.checked);
+                            setView(e.target.checked);
+                          }}
+                        />
+                      }
+                    />
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <AppsIcon
+                        sx={{ color: view ? "rgb(214, 0, 110)" : "#000" }}
+                      />
+                      <Typography >
+                        Node View
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Box sx={{display: 'flex', flexDirection: 'row', gap: '4px'}}>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <ViewModuleIcon
+                        sx={{ color: !upfView ? "rgb(214, 0, 110)" : "#000" }}
+                      />
+                      <Typography>
+                        Mobility Heatmap
+                      </Typography>
+                    </Box>
+                    <FormControlLabel
+                      style={{marginLeft: 0, marginRight: 0}}
+                      control={
+                        <IOSSwitch
+                          sx={{ m: 1 }}
+                          checked={upfView}
+                          onChange={(e) => {
+                            localStorage.setItem("upf_view", e.target.checked);
+                            toggleUPFView(e.target.checked);
+
+                            // Refresh oor for mobility view
+                            localStorage.setItem('oor', 'false');
+                            toggleOOR(false)
+                          }}
+                        />
+                      }
+                    />
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <AppsIcon
+                        sx={{ color: upfView ? "rgb(214, 0, 110)" : "#000" }}
+                      />
+                      <Typography>
+                        UPF/SMF View
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Stack>
+                <Stack direction="row" justifyContent="end" xs={1}>
+                  {dataLoading && (
+                    <Box sx={{ alignItems: "right"}}>
+                      <CircularProgress />
+                    </Box>
+                  )}
+                </Stack>
+              </Grid>
+              <Grid container gap={2} sx={{ marginBottom: "24px" }}>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters.includes("critical")}
+                    onChange={(e) => handleFilterToggle("critical", e)}
+                    sx={{
+                      "& .MuiSvgIcon-root": {
+                        color: "#ff0040",
+                      },
+                      "&.Mui-checked .MuiIconButton-root": {
+                        backgroundColor: "#ff0040",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Critical
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters.includes("major")}
+                    onChange={(e) => handleFilterToggle("major", e)}
+                    sx={{
+                      color: "#f2630a",
+                      "&.Mui-checked": {
+                        color: "#f2630a",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Major
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters.includes("minor")}
+                    onChange={(e) => handleFilterToggle("minor", e)}
+                    sx={{
+                      color: "#ffc33f",
+                      "&.Mui-checked": {
+                        color: "#ffc33f",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Minor
+                  </Typography>
+                </Box>
+                {/* <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters.includes("oor")}
+                    onChange={(e) => {handleFilterToggle("oor", e)
+                      toggleLoader();
+                    }}
+                    sx={{
+                      color: "#0a58ca",
+                      "&.Mui-checked": {
+                        color: "#0a58ca",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    OOR
+                  </Typography>
+                </Box> */}
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters.includes("normal")}
+                    onChange={(e) => handleFilterToggle("normal", e)}
+                    sx={{
+                      color: "#198754",
+                      "&.Mui-checked": {
+                        color: "#198754",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Normal
+                  </Typography>
+                </Box>
+
+                <div className="controls">
+                  <IconButton onClick={handleZoomIn}>
+                    <ZoomInIcon sx={{ color: "#d6006e" }} />
+                  </IconButton>
+                  <IconButton onClick={handleZoomOut}>
+                    <ZoomOutIcon sx={{ color: "#d6006e" }} />
+                  </IconButton>
+
+                  <Typography
+                    sx={{ marginLeft: "4px", color: "#d6006e" }}
+                    variant="body"
+                  >
+                    Use Ctrl +/- for window zoom in and out
+                  </Typography>
+                </div>
+              </Grid>
+              <Grid style={{ transform: `scale(${scale})` }} container>
+                {((!hasFilters && !view) || (hasFilters && !view)) && (
+                  <>
+                    {Object.keys(nodes)
+                      .sort()
+                      .map((region, index) => (
+                        <Region
+                          key={index}
+                          region={region}
+                          nodes={nodes[region]}
+                        />
+                      ))}
+                  </>
+                )}
+
+                {((hasFilters && view) || (!hasFilters && view)) &&
+                  Object.keys(filteredNodes)
+                    .sort()
+                    .map((i, index) => (
+                      <Box
+                        key={index}
+                        style={{
+                          width: "50%",
+                          padding: 0,
+                          margin: 0,
+                          border: "2px solid black",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <NodeGroup
+                          keyProp={index}
+                          nodes={filteredNodes[i]}
+                          group={Object.keys(filters)
+                            .filter((key) => filters[key] !== "All")
+                            .reduce(
+                              (acc, key) => ({ ...acc, [key]: filters[key] }),
+                              {}
+                            )}
+                        />
+                      </Box>
+                    ))}
+              </Grid>
+            </>
+          )}
+        </>
+      );
+    }
+  };
+
+  const layout2 = () => {
+    if (error) {
+      return (
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "start",
+            alignItems: "center",
+            height: "100vh",
+            flexDirection: "column",
+          }}
+        >
+          <Typography variant="h4" component="h1" align="center">
+            <EngineeringIcon
+              style={{ width: "100px", height: "100px", color: "#d6006e" }}
+            />
+          </Typography>
+          <Typography variant="h4" component="h1" align="center">
+            Site Maintenance In Progress
+          </Typography>
+        </Box>
+      );
+    } else {
+      return (
+        <>
+          {notifications ? (
+            <Notifications />
+          ) : (
+            <>
+              <Grid
+                container
+                direction="row"
+                sx={{
+                  marginBottom: "24px",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Grid item container xs={9}>
+                  <Box sx={{ minWidth: 180, marginRight: "12px" }}>
+                    <FormControl fullWidth>
+                      <InputLabel id="nodetype-label">Tech Type</InputLabel>
+                      <Select
+                        labelid="nodetype-label"
+                        id="teah_type"
+                        value={nodesData.filters.nodetype}
+                        label="Tech Type"
+                        onChange={(e) => {
+                          dispatch(setFilters2({ selected: { ...nodesData.filters, nodetype: e?.target?.value }, data: nodesData.data }));
+                        }}
+                      >
+                        {nodesData?.baseFilters?.nodetype?.map((ttype) => (
+                          <MenuItem key={ttype} value={ttype}>
+                            {ttype?.toUpperCase()}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ minWidth: 180, marginRight: "12px" }}>
+                    <FormControl fullWidth>
+                      <InputLabel id="pool-label">Pool</InputLabel>
+                      <Select
+                        labelid="pool-label"
+                        id="pool"
+                        value={nodesData.filters.pools}
+                        label="Pool"
+                        onChange={(e) => {
+                          dispatch(setFilters2({ selected: { ...nodesData.filters, pools: e?.target?.value }, data: nodesData.data }));
+                        }}
+                      >
+                        {nodesData?.baseFilters?.pools?.map((pool) => (
+                          <MenuItem key={pool} value={pool}>
+                            {pool?.toUpperCase()}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ minWidth: 180, marginRight: "12px" }}>
+                    <FormControl fullWidth>
+                      <InputLabel id="market-label">Market</InputLabel>
+                      <Select
+                        labelid="market-label"
+                        id="market"
+                        value={nodesData.filters.markets}
+                        label="Market"
+                        onChange={(e) => {
+                          dispatch(setFilters2({ selected: { ...nodesData.filters, markets: e?.target?.value }, data: nodesData.data }));
+                        }}
+                      >
+                        {nodesData?.baseFilters?.markets?.map((market) => (
+                          <MenuItem key={market} value={market}>
+                            {market?.toUpperCase()}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ minWidth: 180, marginRight: "4px" }}>
+                    <FormControl fullWidth>
+                      <InputLabel id="rack-label">Rack</InputLabel>
+                      <Select
+                        labelid="rack-label"
+                        id="rack"
+                        value={nodesData.filters.racks}
+                        label="Rack"
+                        disabled={nodesData.filters.nodetype.toLowerCase() === "smf"}
+                        onChange={(e) => {
+                          dispatch(setFilters2({ selected: { ...nodesData.filters, racks: e?.target?.value }, data: nodesData.data }));
+                        }}
+                      >
+                        {nodesData?.baseFilters?.racks?.map((rack) => (
+                          <MenuItem key={rack} value={rack}>
+                            {rack?.toUpperCase()}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center" }}>
+                    <IconButton onClick={handleResetFilters} aria-label="refresh">
+                      <SyncIcon />
+                    </IconButton>
+                  </Box>
+                  <Box sx={{ minWidth: 180, marginRight: "12px" }}>
+                    <FormControl fullWidth>
+                      {/* <InputLabel id="search-label">Search</InputLabel> */}
+                      <TextField
+                        labelid="search-label"
+                        variant="outlined"
+                        label="Search"
+                        value={searchTerm2}
+                        onChange={(e) => {
+                          setSearchTerm2(e?.target?.value)
+                        }}
+                        onKeyUp={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            dispatch(setSearch2({
+                              search: searchTerm2,
+                              selected: nodesData.filters,
+                              data: nodesData.data
+                            }));
+                          }
+                        }}
+                        sx={{ mr: 1, flex: 1 }}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  dispatch(setSearch2({
+                                    search: searchTerm2,
+                                    selected: nodesData.filters,
+                                    data: nodesData.data
+                                  }));
+                                }}
+                                sx={{ p: "10px" }}
+                                aria-label="search"
+                              >
+                                <SearchIcon />
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </FormControl>
+                  </Box>
+                </Grid>
+
+                <Stack xs={2} direction="column"  alignItems="center">
+                  <Box sx={{display: 'flex', flexDirection: 'row', gap: '4px'}}>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <ViewModuleIcon
+                        sx={{ color: !upfView ? "rgb(214, 0, 110)" : "#000" }}
+                      />
+                      <Typography>
+                        Mobility Heatmap
+                      </Typography>
+                    </Box>
+                    <FormControlLabel
+                      style={{marginLeft: 0, marginRight: 0}}
+                      control={
+                        <IOSSwitch
+                          sx={{ m: 1 }}
+                          checked={upfView}
+                          onChange={(e) => {
+                            localStorage.setItem("upf_view", e.target.checked);
+                            toggleUPFView(e.target.checked);
+                          }}
+                        />
+                      }
+                    />
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <AppsIcon
+                        sx={{ color: upfView ? "rgb(214, 0, 110)" : "#000" }}
+                      />
+                      <Typography>
+                        UPF/SMF View
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Stack>
+                <Stack direction="row" justifyContent="end" xs={1}>
+                  {nodesData.loading && (
+                    <Box sx={{ alignItems: "right" }}>
+                      <CircularProgress />
+                    </Box>
+                  )}
+                </Stack>
+              </Grid>
+              <Grid container gap={2} sx={{ marginBottom: "24px" }}>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters2.includes("critical")}
+                    onChange={(e) => handleFilterToggle2("critical", e)}
+                    sx={{
+                      "& .MuiSvgIcon-root": {
+                        color: "#ff0040",
+                      },
+                      "&.Mui-checked .MuiIconButton-root": {
+                        backgroundColor: "#ff0040",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Critical
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters2.includes("major")}
+                    onChange={(e) => handleFilterToggle2("major", e)}
+                    sx={{
+                      color: "#f2630a",
+                      "&.Mui-checked": {
+                        color: "#f2630a",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Major
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters2.includes("minor")}
+                    onChange={(e) => handleFilterToggle2("minor", e)}
+                    sx={{
+                      color: "#ffc33f",
+                      "&.Mui-checked": {
+                        color: "#ffc33f",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Minor
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters2.includes("oor")}
+                    onChange={(e) => handleFilterToggle2("oor", e)}
+                    sx={{
+                      color: "#0a58ca",
+                      "&.Mui-checked": {
+                        color: "#0a58ca",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    OOR
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={selectedFilters2.includes("normal")}
+                    onChange={(e) => handleFilterToggle2("normal", e)}
+                    sx={{
+                      color: "#198754",
+                      "&.Mui-checked": {
+                        color: "#198754",
+                      },
+                    }}
+                  />
+                  <Typography sx={{ marginLeft: "4px" }} variant="body">
+                    Normal
+                  </Typography>
+                </Box>
+
+                <div className="controls">
+                  <IconButton onClick={handleZoomIn}>
+                    <ZoomInIcon sx={{ color: "#d6006e" }} />
+                  </IconButton>
+                  <IconButton onClick={handleZoomOut}>
+                    <ZoomOutIcon sx={{ color: "#d6006e" }} />
+                  </IconButton>
+
+                  <Typography
+                    sx={{ marginLeft: "4px", color: "#d6006e" }}
+                    variant="body"
+                  >
+                    Use Ctrl +/- for window zoom in and out
+                  </Typography>
+                </div>
+              </Grid>
+              <Grid style={{ transform: `scale(${scale})` }} container>
+                <>
+                  {nodesData.nodes && (Object.keys(nodesData.nodes)
+                    .sort()
+                    .map((region, index) => (
+                      <Region2
+                        key={index}
+                        region={region}
+                        nodes={nodesData.nodes[region]}
+                        stats={nodesData.stats}
+                        nest={nestInfo}
+                      />
+                    )))}
+                </>
+              </Grid>
+            </>
+          )}
+        </>
+      );
+    }
+  };
+
+  return (
+    <div style={{ overflowX: "auto", whiteSpace: "nowrap", padding: 20 }}>
+      <React.Fragment>
+            {/* The Alert pop-up is removed here */}
+      </React.Fragment>
+      {upfView ? layout2() : layout()}
+    </div>
+  );
+};
+
+export default DashBoard;
