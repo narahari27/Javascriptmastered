@@ -1,268 +1,123 @@
-const KPI_NAME = {
-    'UE_Attach_SR': 'Attach',
-    'UE_ServiceReq_SR': 'Service Request',
-    'UE_Authen_SR': 'UE Authentication',
-    'HSS_Authen_SR': 'HSS Authentication (AIA/AIR)',
-    'Update_Location_SR': 'Update Location (ULA/ULR)',
-    'Def_Bearer_SR': 'Default Bearer Activation',
-    'PDNConnReq_SR': 'PDN Connectivity',
-    'PdnConnIms_SR': 'PDN Connectivity (IMS)',
-    'Create_Ded_Bearer_QCI1': 'Create Ded Bearer (VoLTE)',
-    'UpdateDedicatedBearer_QCI_1_SR': 'Update Ded Bearer (VoLTE)',
-    'Create_Ded_Bearer_QCI2': 'Create Ded Bearer (PoLTE/QCI2)',
-    'EmergencyAttach_Res': 'Attach (Emergency)',
-    'MobileTermLocRequests_SR': 'MT Location Request',
-    'Paging_Resp_SR': 'Paging',
-    'Total_TAU_SR': 'Tracking Area Update (TAU)',
-    'UE_RF_Drp_Rate': 'UE RF Drop Rate',
-    'CreateDedBea_QCI1_DrpRate_Res': 'Ded Bearer RF Drop Rate(QCI1)',
-    'GTP_S11_SR': 'GTP-C S11 Resp/Request',
-    'NbrProceduresProcessed_sum_SR': 'All MME Procedure Processed',
-    'DNS_SR': 'DNS (MME<->DNS-G)'
+const priorityValues = { "critical": 1, "major": 2, "minor": 3, "normal": 4 };
+
+function getNodePriority(stats, status) {
+  let highestPriority = "normal";
+  if (status && (status?.toLowerCase() == 'inservice' || status?.toLowerCase() == 'not_found' || status?.toLowerCase() == 'new' || status?.toLowerCase() == 'maintenance si')) {
+    if (stats) {
+      Object.values(stats).forEach(item => {
+        if (item.priority && priorityValues[item.priority] < priorityValues[highestPriority]) {
+          highestPriority = item.priority;
+        }
+      });
+    } else {
+      highestPriority = ''
+    }
+  } else {
+    highestPriority = 'oor'    
+  }
+
+  return highestPriority;
 }
 
-let isString = value => typeof value === 'string' || value instanceof String;
-
-function determinePriority(stat) {
-    // Skip determination if inactive
-    if(stat.is_active === 0){
-        return;
-    }
-    
-    // Special condition for NRF nodes
-    if(stat?.nodetype === "nrf" && (stat?.display_type === "kpi" || stat?.displaytype === "kpi") && stat?.type === "NRD") {
-        // Case 1: Check if att is greater than or equal to attempt
-        if(stat?.att >= stat?.attempt) {
-            // Determine priority based on succ value
-            return determineNrfPriority(stat);
+function getNRFNodePriority(stats, status, ntwCheck) {
+  let highestPriority = "normal";
+  if (ntwCheck && ntwCheck == 'ON' && status && (status?.toLowerCase() == 'inservice' || status?.toLowerCase() == 'not_found' || status?.toLowerCase() == 'new')) {
+    if (stats) {
+      Object.values(stats).forEach(item => {
+        // Apply special condition for NRF nodes
+        if (item['NRD'] && item['NRD']?.display_type == 'kpi') {
+          // Case 1: att is greater than or equal to attempt
+          if (item['NRD']?.att >= item['NRD']?.attempt) {
+            // Keep the existing priority determined by ProcessStats.js
+          }
+          // Case 2: attempt is null/undefined and att is 0 or more
+          else if ((item['NRD']?.attempt === null || item['NRD']?.attempt === undefined) && item['NRD']?.att >= 0) {
+            // Keep the existing priority determined by ProcessStats.js
+          }
+          // Special case: att == 0 and succ == 0 or null
+          else if (item['NRD']?.att == 0 && (item['NRD']?.succ == 0 || item['NRD']?.succ == null || item['NRD']?.succ == undefined || item['NRD']?.succ == 'null')) {
+            item['NRD'].priority = 'normal';
+          }
         }
         
-        // Case 2: Check if attempt is null and att is 1 or more
-        if((stat?.attempt === null || stat?.attempt === undefined) && stat?.att >= 1) {
-            // Determine priority based on succ value
-            return determineNrfPriority(stat);
+        if (item['NRD']?.priority && priorityValues[item['NRD']?.priority] < priorityValues[highestPriority]) {
+          highestPriority = item['NRD']?.priority;
         }
+      });
+    } else {
+      highestPriority = '';
     }
-    
-    // If there are no threshold values, return normal or default handling
-    if (!stat.red && !stat.orange && !stat.green && !stat.yellow) {
-        return;
-    }
+  } else {
+    highestPriority = 'oor';
+  }
 
-    // Handle non-string thresholds
-    if(!isString(stat.red) && !isString(stat.orange) && !isString(stat.green) && !isString(stat.yellow)) {
-        return 'normal';
-    }
-
-    // Parse and evaluate thresholds
-    const greenCondition = parseCondition(stat.green);
-    const orangeCondition = parseCondition(stat.orange);
-    const redCondition = parseCondition(stat.red);
-    const yellowCondition = parseCondition(stat.yellow);
-    let calcAttempt = false;
-
-    if (stat?.attempt == 1) {
-        calcAttempt = true;
-    }
-
-    const valueToCompare = stat?.display_type == 'kpi' ? stat?.succ : stat?.att;
-
-    const conditions = {'normal': greenCondition, 'major': orangeCondition, 'critical': redCondition, 'minor': yellowCondition}
-    for(let priority in conditions){
-        const condition = conditions[priority];
-        if (!condition) continue;
-        
-        const parts = condition.split('&&');
-        let logic = '';
-        if(parts.length == 2 ){
-            logic = 'value' + ' ' + parts[0] + ' && ' + 'value' + parts[1];
-        } else {
-            logic = 'value' + ' ' + parts[0];
-        }
-
-        try {
-            const conditionMet = new Function('value', `return ${logic};`);
-            if(conditionMet(valueToCompare)){
-                if (calcAttempt) {
-                    if (stat.display_type == 'kpi' &&  (stat.att == 0 && (stat.succ == 0 || stat.succ == null || stat.succ == undefined || stat.succ == 'null'))) {
-                        return 'normal';
-                    } else if (stat.att > stat?.att_val) {
-                        return priority;
-                    } else {
-                        return 'critical';
-                    }
-                }
-                return priority;
-            }
-        } catch (e) {
-            console.error("Error evaluating condition:", e);
-            return 'normal';
-        }
-    }
-    
-    // Default return if no conditions are met
-    return 'normal';
-}
-
-// Helper function for NRF priority determination based on success rate
-function determineNrfPriority(stat) {
-    // Parse threshold values for NRF
-    const greenCondition = parseCondition(stat.green);
-    const orangeCondition = parseCondition(stat.orange);
-    const redCondition = parseCondition(stat.red);
-    const yellowCondition = parseCondition(stat.yellow);
-    
-    // The value to compare against thresholds for NRF is succ
-    const valueToCompare = stat?.succ;
-    
-    // Define priority checks
-    const conditions = {
-        'normal': greenCondition, 
-        'major': orangeCondition, 
-        'critical': redCondition, 
-        'minor': yellowCondition
-    };
-    
-    // Check each condition
-    for(let priority in conditions){
-        const condition = conditions[priority];
-        if (!condition) continue;
-        
-        const parts = condition.split('&&');
-        let logic = '';
-        if(parts.length == 2){
-            logic = 'value' + ' ' + parts[0] + ' && ' + 'value' + parts[1];
-        } else {
-            logic = 'value' + ' ' + parts[0];
-        }
-
-        try {
-            const conditionMet = new Function('value', `return ${logic};`);
-            if(conditionMet(valueToCompare)){
-                return priority;
-            }
-        } catch (e) {
-            console.error("Error evaluating NRF condition:", e);
-        }
-    }
-    
-    // Default return
-    return 'normal';
-}
-
-function parseCondition(condition) {
-    if (!condition) {
-        return null;
-    }
-
-    return condition.replace(/\s{2,}/g, ' ').replace(/and/g, '&&').replace(/AND/g, '&&').replace(/or/g, '||').replace(/OR/g, '||')
-}
-
-function checkCondition(conditions, value, stat) {
-    return conditions.every(condition => {
-        switch (condition.operator) {
-            case '>':
-                return value > condition.value;
-            case '<':
-                return value < condition.value;
-            case '>=':
-                return value >= condition.value;
-            case '<=':
-                return value <= condition.value;
-            default:
-                return false;
-        }
-    });
-}
-
-function calculatePriority(stats) {
-    const last_value = stats.rate;
-    if (last_value < stats?.orange) {
-        return 'critical';
-    } else if (last_value < stats?.yellow && last_value >= stats?.orange) {
-        return 'major';
-    } else if (last_value < stats?.green && last_value >= stats?.yellow) {
-        return 'minor';
-    } else if (last_value >= stats?.green) {
-        return 'normal';
-    }
-
-    return;
+  return highestPriority;
 }
 
 function processData(data) {
-    const { stats, avg } = data;
+  const { nodes, notes, nest, nodeStatsProcessedCount } = data;
+  const NFTYPE_ORDER = ['NRD','NRF','AMF','SMF','SMFC','PCF','CHF','UDM','AUSF','SCP','GMLC','LMF','NEF','EIR','BSF','SMSF'];
 
-    const AVG = avg?.reduce((acc, curr) => {
-        if (!acc[curr.host_name]) {
-            acc[curr.host_name] = {}
-            acc[curr.host_name][curr.kpi] = curr.last_7_avg_succ
-        } else {
-            acc[curr.host_name][curr.kpi] = curr.last_7_avg_succ
+  const NOTES = notes?.reduce((acc, curr) => {
+    if (!acc[curr.host_name]) {
+      acc[curr.host_name] = [];
+    }
+    acc[curr.host_name].push(curr);
+    return acc
+  }, {});
+
+  const NEST = nest?.reduce((acc, curr) => {
+    acc[curr.nodeName] = curr;
+    return acc
+  }, {});
+
+  const NODES = nodes?.reduce((acc, curr) => {
+    const obj = {
+      ...curr,
+      notes: NOTES ? NOTES[curr.host_name] : '',
+      nestStatus: NEST && NEST[curr.host_name] ? NEST[curr.host_name].nodeStatus : '',
+    }
+    let currentNodeStats = data.stats[curr.host_name];
+    
+    if (data.stats && data.stats[curr.host_name]) {
+      if (curr.nodetype == 'nrf') {
+        const KPIHeaders = Object.keys(Object.values(data.stats[curr.host_name])?.[0])
+        obj.stats = data.stats[curr.host_name];
+        obj.priority = getNRFNodePriority(currentNodeStats, NEST[curr.host_name]?.nodeStatus, curr.ntwCheck);
+        obj.kpiHeaders = KPIHeaders?.sort((a, b) => NFTYPE_ORDER.indexOf(a) - NFTYPE_ORDER.indexOf(b));
+      } else if(curr.nodetype === "smsf") {
+        if(currentNodeStats && currentNodeStats?.ModelD?.att === 'false'){
+          obj.stats = data.stats[curr.host_name];
+          obj.priority = 'oor';
+        }else {
+          obj.stats = data.stats[curr.host_name];
+          obj.priority = getNodePriority(currentNodeStats, NEST[curr.host_name]?.nodeStatus);
         }
-        return acc;
-    }, {});
-
-    const ATT = avg?.reduce((acc, curr) => {
-        if (!acc[curr.host_name]) {
-            acc[curr.host_name] = {}
-            acc[curr.host_name][curr.kpi] = curr.last_7_avg_att
+      } else {
+        if(currentNodeStats && ((currentNodeStats?.RC_Value?.att === 0 || currentNodeStats?.RC_Value?.att === '0') || (currentNodeStats?.RC?.att === 0 || currentNodeStats?.RC?.att === '0'))){
+          obj.stats = data.stats[curr.host_name];
+          obj.priority = 'oor';
         } else {
-            acc[curr.host_name][curr.kpi] = curr.last_7_avg_att
+          obj.stats = data.stats[curr.host_name];
+          obj.priority = getNodePriority(currentNodeStats, NEST[curr.host_name]?.nodeStatus);
         }
-        return acc;
-    }, {});
+      }
+    } else {
+      if(data.stats[curr.host_name]  === undefined && nodeStatsProcessedCount[curr.host_name] >= 2){
+        obj.stats = data.stats[curr.host_name];
+      }
+      obj.priority = ""
+    }
 
-    const STATS = stats?.reduce((acc, curr) => {
-        if (curr.nodetype == 'nrf') {
-            if (!acc[curr.host_name]) {
-                acc[curr.host_name] = {}
-            }
+    acc.push(obj)
 
-            if (!acc[curr.host_name][curr.kpi]) {
-                acc[curr.host_name][curr.kpi] = {}
-            }
+    return acc;
+  }, []);
 
-            if (curr.type) {
-                acc[curr.host_name][curr.kpi][curr.type] = {
-                    ...curr,
-                    name: KPI_NAME[curr.kpi],
-                    priority: determinePriority(curr)
-                }
-
-            } else if (curr.nftype) {
-                acc[curr.host_name][curr.kpi][curr.nftype] = {
-                    ...curr,
-                    name: KPI_NAME[curr.kpi]
-                }
-            }
-        } else {
-            if (!acc[curr.host_name]) {
-                acc[curr.host_name] = {}
-                acc[curr.host_name][curr.kpi] = {
-                    ...curr,
-                    name: KPI_NAME[curr.kpi],
-                    priority: determinePriority(curr),
-                    avg: AVG && AVG[curr.host_name] ? AVG[curr.host_name][curr.kpi] : 0,
-                    last_7_att: ATT && ATT[curr.host_name] ? ATT[curr.host_name][curr.kpi] : 0
-                }
-            } else {
-                acc[curr.host_name][curr.kpi] = {
-                    ...curr,
-                    name: KPI_NAME[curr.kpi],
-                    priority: determinePriority(curr),
-                    avg: AVG && AVG[curr.host_name] ? AVG[curr.host_name][curr.kpi] : 0,
-                    last_7_att: ATT && ATT[curr.host_name] ? ATT[curr.host_name][curr.kpi] : 0
-                }
-            }
-        }
-        return acc;
-    }, {});
-
-    return STATS;
+  return NODES;
 }
 
 onmessage = function (e) {
-    const result = processData(e.data);
-    postMessage(result);
+  const result = processData(e.data);
+  postMessage(result);
 };
