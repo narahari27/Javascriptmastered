@@ -40,3 +40,10 @@
         alerts, 
         notificationsFilter
     ]);
+
+    const handleHeaderFilterChange = (event, filterName) => {
+        setHeaderFilters({
+            ...headerFilters,
+            [filterName]: event.target.value
+        });
+    };
