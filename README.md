@@ -3,7 +3,7 @@ import { NodeContext } from "../NodeContext";
 import { 
     Table, TableBody, TableCell, TableHead, TableRow, Paper, 
     Typography, Grid, Box, Checkbox, Select, MenuItem,
-    FormControl, InputLabel, IconButton, Popper, ClickAwayListener
+    FormControl, InputLabel, IconButton, Popover
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -39,7 +39,6 @@ const styles = {
     },
     filterContainer: {
         backgroundColor: 'white',
-        border: '1px solid #d6006e',
         width: '200px',
         padding: '8px',
         borderRadius: '4px',
@@ -66,8 +65,8 @@ const Notifications = () => {
     // State for which filter dropdown is open
     const [openFilter, setOpenFilter] = useState(null);
     
-    // Anchor element for Popper
-    const [anchorEl, setAnchorEl] = useState(null);
+    // Anchor elements for filter popups
+    const [anchorEls, setAnchorEls] = useState({});
     
     // State for column filters
     const [columnFilters, setColumnFilters] = useState({
@@ -83,14 +82,15 @@ const Notifications = () => {
     const [filteredNewAlerts, setFilteredNewAlerts] = useState([]);
     const [filteredAllAlerts, setFilteredAllAlerts] = useState([]);
     
-    // Refs for filter buttons
-    const filterButtonRefs = useRef({});
-    
     // Initialize filtered alerts on component mount
     useEffect(() => {
-        setFilteredNewAlerts(alerts.filter(alert => alert.host_name.indexOf('NRF') === -1));
-        setFilteredAllAlerts(allAlerts.filter(alert => alert.host_name.indexOf('NRF') === -1));
-    }, []);
+        if (alerts && alerts.length) {
+            setFilteredNewAlerts(alerts.filter(alert => alert.host_name.indexOf('NRF') === -1));
+        }
+        if (allAlerts && allAlerts.length) {
+            setFilteredAllAlerts(allAlerts.filter(alert => alert.host_name.indexOf('NRF') === -1));
+        }
+    }, [alerts, allAlerts]);
     
     // Extract unique values for each column to use in filter dropdowns
     const getUniqueFilterValues = (column) => {
@@ -116,7 +116,7 @@ const Notifications = () => {
             
             // Add values from both alert arrays
             [...alerts, ...allAlerts].forEach(alert => {
-                if (alert[property]) {
+                if (alert && alert[property]) {
                     allValues.add(alert[property]);
                 }
             });
@@ -131,10 +131,16 @@ const Notifications = () => {
         
         if (openFilter === column) {
             setOpenFilter(null);
-            setAnchorEl(null);
+            setAnchorEls(prev => ({
+                ...prev,
+                [column]: null
+            }));
         } else {
             setOpenFilter(column);
-            setAnchorEl(filterButtonRefs.current[column]);
+            setAnchorEls(prev => ({
+                ...prev,
+                [column]: event.currentTarget
+            }));
         }
     };
     
@@ -148,21 +154,28 @@ const Notifications = () => {
     
     // Clear a specific filter
     const clearFilter = (column, event) => {
-        event.stopPropagation();
+        if (event) {
+            event.stopPropagation();
+        }
         setColumnFilters(prevFilters => ({
             ...prevFilters,
             [column]: 'All'
         }));
     };
 
-    // Close filter when clicking away
-    const handleClickAway = () => {
+    // Handle popover close
+    const handlePopoverClose = (column) => {
         setOpenFilter(null);
-        setAnchorEl(null);
+        setAnchorEls(prev => ({
+            ...prev,
+            [column]: null
+        }));
     };
     
     // Apply filters to alert data
     useEffect(() => {
+        if (!alerts || !allAlerts) return;
+        
         // Get alerts already filtered by priority and time
         let newAlertsToFilter = notificationsFilter.priorities.length 
             ? filteredNotifications.alerts 
@@ -191,17 +204,17 @@ const Notifications = () => {
                     if (property === 'isNew') {
                         const isNew = value === 'New';
                         newAlertsToFilter = newAlertsToFilter.filter(alert => 
-                            alert[property] === isNew
+                            alert && alert[property] === isNew
                         );
                         allAlertsToFilter = allAlertsToFilter.filter(alert => 
-                            alert[property] === isNew
+                            alert && alert[property] === isNew
                         );
                     } else {
                         newAlertsToFilter = newAlertsToFilter.filter(alert => 
-                            alert[property] === value
+                            alert && alert[property] === value
                         );
                         allAlertsToFilter = allAlertsToFilter.filter(alert => 
-                            alert[property] === value
+                            alert && alert[property] === value
                         );
                     }
                 }
@@ -233,7 +246,6 @@ const Notifications = () => {
         columnFilters,
         allAlerts, 
         alerts,
-
         notificationsFilter
     ]);
 
@@ -313,48 +325,53 @@ const Notifications = () => {
                         size="small"
                         onClick={(e) => toggleFilter(column, e)}
                         style={{ padding: '2px', color: 'white' }}
-                        ref={el => filterButtonRefs.current[column] = el}
                     >
                         <FilterListIcon style={styles.filterIcon} />
                     </IconButton>
                 </div>
             </div>
             
-            <Popper 
-                open={openFilter === column} 
-                anchorEl={anchorEl}
-                placement="bottom-start"
-                style={{ zIndex: 1300 }}
+            <Popover
+                open={openFilter === column}
+                anchorEl={anchorEls[column]}
+                onClose={() => handlePopoverClose(column)}
+                anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: 'left',
+                }}
+                transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'left',
+                }}
+                onClick={(e) => e.stopPropagation()}
             >
-                <ClickAwayListener onClickAway={handleClickAway}>
-                    <div style={styles.filterContainer}>
-                        <FormControl fullWidth size="small">
-                            <InputLabel id={`${column}-filter-label`}>Filter {title}</InputLabel>
-                            <Select
-                                labelId={`${column}-filter-label`}
-                                value={columnFilters[column]}
-                                label={`Filter ${title}`}
-                                onChange={(e) => handleFilterChange(column, e.target.value)}
-                                style={styles.filterSelect}
-                            >
-                                {getUniqueFilterValues(column).map((option) => (
-                                    <MenuItem key={option} value={option}>{option}</MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                        <div style={styles.filterActions}>
-                            <IconButton
-                                size="small"
-                                onClick={(e) => clearFilter(column, e)}
-                                style={{ padding: '2px' }}
-                                title="Clear filter"
-                            >
-                                <ClearIcon fontSize="small" />
-                            </IconButton>
-                        </div>
+                <div style={styles.filterContainer}>
+                    <FormControl fullWidth size="small">
+                        <InputLabel id={`${column}-filter-label`}>Filter {title}</InputLabel>
+                        <Select
+                            labelId={`${column}-filter-label`}
+                            value={columnFilters[column]}
+                            label={`Filter ${title}`}
+                            onChange={(e) => handleFilterChange(column, e.target.value)}
+                            style={styles.filterSelect}
+                        >
+                            {getUniqueFilterValues(column).map((option) => (
+                                <MenuItem key={option} value={option}>{option}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                    <div style={styles.filterActions}>
+                        <IconButton
+                            size="small"
+                            onClick={(e) => clearFilter(column, e)}
+                            style={{ padding: '2px' }}
+                            title="Clear filter"
+                        >
+                            <ClearIcon fontSize="small" />
+                        </IconButton>
                     </div>
-                </ClickAwayListener>
-            </Popper>
+                </div>
+            </Popover>
         </TableCell>
     );
 
@@ -458,6 +475,65 @@ const Notifications = () => {
                 </Box>
             </Grid>
 
+            {/* Active Filters Display */}
+            {Object.entries(columnFilters).some(([_, value]) => value !== 'All') && (
+                <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', mr: 1 }}>
+                        Active Filters:
+                    </Typography>
+                    {Object.entries(columnFilters).map(([column, value]) => 
+                        value !== 'All' ? (
+                            <Box 
+                                key={column}
+                                sx={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    bgcolor: '#f5f5f5',
+                                    borderRadius: '16px',
+                                    px: 1,
+                                    py: 0.5,
+                                    mr: 1
+                                }}
+                            >
+                                <Typography variant="body2">
+                                    {column}: {value}
+                                </Typography>
+                                <IconButton 
+                                    size="small" 
+                                    onClick={() => clearFilter(column)}
+                                    sx={{ ml: 0.5, p: 0 }}
+                                >
+                                    <ClearIcon sx={{ fontSize: 14 }} />
+                                </IconButton>
+                            </Box>
+                        ) : null
+                    )}
+                    <Box 
+                        sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            color: '#d6006e',
+                            cursor: 'pointer',
+                            '&:hover': { textDecoration: 'underline' }
+                        }}
+                        onClick={() => {
+                            setColumnFilters({
+                                currentState: 'All',
+                                previousState: 'All',
+                                node: 'All',
+                                kpiName: 'All',
+                                pool: 'All',
+                                status: 'All'
+                            });
+                        }}
+                    >
+                        <Typography variant="body2">
+                            Clear all filters
+                        </Typography>
+                    </Box>
+                </Box>
+            )}
+
             {/* New Alerts Table */}
             <Typography variant="h4" sx={{ py: 2 }}>New Alerts</Typography>
             <Table style={styles.table}>
@@ -478,7 +554,7 @@ const Notifications = () => {
                     </TableRow>
                 </TableHead>
                 <TableBody>
-                    {filteredNewAlerts.length > 0 ? (
+                    {filteredNewAlerts && filteredNewAlerts.length > 0 ? (
                         filteredNewAlerts.map((alert, index) => (
                             <TableRow key={index}>
                                 <TableCell style={styles.tableCell}>{new Date(alert.timestamp).toLocaleString()}</TableCell>
@@ -525,7 +601,7 @@ const Notifications = () => {
                     </TableRow>
                 </TableHead>
                 <TableBody>
-                    {filteredAllAlerts.length > 0 ? (
+                    {filteredAllAlerts && filteredAllAlerts.length > 0 ? (
                         filteredAllAlerts.map((alert, index) => (
                             <TableRow key={index}>
                                 <TableCell style={styles.tableCell}>{new Date(alert.timestamp).toLocaleString()}</TableCell>
