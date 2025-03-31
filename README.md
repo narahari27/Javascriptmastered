@@ -1,9 +1,9 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useState, useRef } from "react";
 import { NodeContext } from "../NodeContext";
 import { 
     Table, TableBody, TableCell, TableHead, TableRow, Paper, 
     Typography, Grid, Box, Checkbox, Select, MenuItem,
-    FormControl, InputLabel, IconButton
+    FormControl, InputLabel, IconButton, Popper, ClickAwayListener
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -34,21 +34,17 @@ const styles = {
     filterIcon: {
         color: 'white',
         fontSize: '16px',
-        marginLeft: '4px',
         cursor: 'pointer',
         verticalAlign: 'middle'
     },
     filterContainer: {
-        position: 'absolute',
         backgroundColor: 'white',
-        zIndex: 10,
         border: '1px solid #d6006e',
         width: '200px',
         padding: '8px',
         borderRadius: '4px',
-        top: '100%',
-        left: '0',
-        boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+        boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+        zIndex: 1000
     },
     filterSelect: {
         width: '100%',
@@ -70,6 +66,9 @@ const Notifications = () => {
     // State for which filter dropdown is open
     const [openFilter, setOpenFilter] = useState(null);
     
+    // Anchor element for Popper
+    const [anchorEl, setAnchorEl] = useState(null);
+    
     // State for column filters
     const [columnFilters, setColumnFilters] = useState({
         currentState: 'All',
@@ -83,6 +82,15 @@ const Notifications = () => {
     // State for filtered alerts
     const [filteredNewAlerts, setFilteredNewAlerts] = useState([]);
     const [filteredAllAlerts, setFilteredAllAlerts] = useState([]);
+    
+    // Refs for filter buttons
+    const filterButtonRefs = useRef({});
+    
+    // Initialize filtered alerts on component mount
+    useEffect(() => {
+        setFilteredNewAlerts(alerts.filter(alert => alert.host_name.indexOf('NRF') === -1));
+        setFilteredAllAlerts(allAlerts.filter(alert => alert.host_name.indexOf('NRF') === -1));
+    }, []);
     
     // Extract unique values for each column to use in filter dropdowns
     const getUniqueFilterValues = (column) => {
@@ -118,28 +126,39 @@ const Notifications = () => {
     };
     
     // Function to toggle filter dropdown
-    const toggleFilter = (column) => {
+    const toggleFilter = (column, event) => {
+        event.stopPropagation();
+        
         if (openFilter === column) {
             setOpenFilter(null);
+            setAnchorEl(null);
         } else {
             setOpenFilter(column);
+            setAnchorEl(filterButtonRefs.current[column]);
         }
     };
     
     // Handle filter change
     const handleFilterChange = (column, value) => {
-        setColumnFilters({
-            ...columnFilters,
+        setColumnFilters(prevFilters => ({
+            ...prevFilters,
             [column]: value
-        });
+        }));
     };
     
     // Clear a specific filter
-    const clearFilter = (column) => {
-        setColumnFilters({
-            ...columnFilters,
+    const clearFilter = (column, event) => {
+        event.stopPropagation();
+        setColumnFilters(prevFilters => ({
+            ...prevFilters,
             [column]: 'All'
-        });
+        }));
+    };
+
+    // Close filter when clicking away
+    const handleClickAway = () => {
+        setOpenFilter(null);
+        setAnchorEl(null);
     };
     
     // Apply filters to alert data
@@ -189,16 +208,21 @@ const Notifications = () => {
             }
         });
         
+        // Filter out NRF nodes
+        newAlertsToFilter = newAlertsToFilter.filter(alert => 
+            alert && alert.host_name && alert.host_name.indexOf('NRF') === -1
+        );
+        
+        allAlertsToFilter = allAlertsToFilter.filter(alert => 
+            alert && alert.host_name && alert.host_name.indexOf('NRF') === -1
+        );
+        
         // Sort by timestamp (newest first)
-        newAlertsToFilter = [...newAlertsToFilter].filter(alert => 
-            alert.host_name.indexOf('NRF') === -1
-        ).sort((a, b) => 
+        newAlertsToFilter = [...newAlertsToFilter].sort((a, b) => 
             new Date(b.timestamp) - new Date(a.timestamp)
         );
         
-        allAlertsToFilter = [...allAlertsToFilter].filter(alert => 
-            alert.host_name.indexOf('NRF') === -1
-        ).sort((a, b) => 
+        allAlertsToFilter = [...allAlertsToFilter].sort((a, b) => 
             new Date(b.timestamp) - new Date(a.timestamp)
         );
         
@@ -208,7 +232,8 @@ const Notifications = () => {
         filteredNotifications,
         columnFilters,
         allAlerts, 
-        alerts, 
+        alerts,
+
         notificationsFilter
     ]);
 
@@ -266,58 +291,72 @@ const Notifications = () => {
     // Render a table header cell with filter
     const renderFilterableHeader = (title, column) => (
         <TableCell style={styles.tableHeaderCell}>
-            {title}
-            <IconButton
-                size="small"
-                onClick={() => toggleFilter(column)}
-                style={{ padding: '2px', marginLeft: '4px' }}
-            >
-                <FilterListIcon style={styles.filterIcon} />
-            </IconButton>
-            
-            {openFilter === column && (
-                <div style={styles.filterContainer} onClick={(e) => e.stopPropagation()}>
-                    <FormControl fullWidth size="small">
-                        <InputLabel id={`${column}-filter-label`}>Filter {title}</InputLabel>
-                        <Select
-                            labelId={`${column}-filter-label`}
-                            value={columnFilters[column]}
-                            label={`Filter ${title}`}
-                            onChange={(e) => handleFilterChange(column, e.target.value)}
-                            style={styles.filterSelect}
-                        >
-                            {getUniqueFilterValues(column).map((option) => (
-                                <MenuItem key={option} value={option}>{option}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                    <div style={styles.filterActions}>
-                        <IconButton
-                            size="small"
-                            onClick={() => clearFilter(column)}
-                            style={{ padding: '2px' }}
-                            title="Clear filter"
-                        >
-                            <ClearIcon fontSize="small" />
-                        </IconButton>
-                    </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>{title}</span>
+                <div>
+                    {columnFilters[column] !== 'All' && (
+                        <span style={{ 
+                            backgroundColor: '#fff', 
+                            color: '#d6006e', 
+                            borderRadius: '50%', 
+                            width: '16px', 
+                            height: '16px', 
+                            display: 'inline-flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            marginRight: '4px',
+                            fontSize: '10px',
+                            fontWeight: 'bold'
+                        }}>✓</span>
+                    )}
+                    <IconButton
+                        size="small"
+                        onClick={(e) => toggleFilter(column, e)}
+                        style={{ padding: '2px', color: 'white' }}
+                        ref={el => filterButtonRefs.current[column] = el}
+                    >
+                        <FilterListIcon style={styles.filterIcon} />
+                    </IconButton>
                 </div>
-            )}
+            </div>
+            
+            <Popper 
+                open={openFilter === column} 
+                anchorEl={anchorEl}
+                placement="bottom-start"
+                style={{ zIndex: 1300 }}
+            >
+                <ClickAwayListener onClickAway={handleClickAway}>
+                    <div style={styles.filterContainer}>
+                        <FormControl fullWidth size="small">
+                            <InputLabel id={`${column}-filter-label`}>Filter {title}</InputLabel>
+                            <Select
+                                labelId={`${column}-filter-label`}
+                                value={columnFilters[column]}
+                                label={`Filter ${title}`}
+                                onChange={(e) => handleFilterChange(column, e.target.value)}
+                                style={styles.filterSelect}
+                            >
+                                {getUniqueFilterValues(column).map((option) => (
+                                    <MenuItem key={option} value={option}>{option}</MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                        <div style={styles.filterActions}>
+                            <IconButton
+                                size="small"
+                                onClick={(e) => clearFilter(column, e)}
+                                style={{ padding: '2px' }}
+                                title="Clear filter"
+                            >
+                                <ClearIcon fontSize="small" />
+                            </IconButton>
+                        </div>
+                    </div>
+                </ClickAwayListener>
+            </Popper>
         </TableCell>
     );
-    
-    // Close filter dropdown when clicking outside
-    useEffect(() => {
-        const handleClickOutside = () => {
-            setOpenFilter(null);
-        };
-        
-        document.addEventListener('click', handleClickOutside);
-        
-        return () => {
-            document.removeEventListener('click', handleClickOutside);
-        };
-    }, []);
 
     return (
         <Paper sx={{ p: 3 }}>
@@ -439,22 +478,30 @@ const Notifications = () => {
                     </TableRow>
                 </TableHead>
                 <TableBody>
-                    {filteredNewAlerts.map((alert, index) => (
-                        <TableRow key={index}>
-                            <TableCell style={styles.tableCell}>{new Date(alert.timestamp).toLocaleString()}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert?.host_name}</TableCell>
-                            <TableCell style={getCellStyle(alert.prevPriority || alert.priority)}>{alert.prevPriority || alert.priority}</TableCell>
-                            <TableCell style={getCellStyle(alert?.priority)}>{alert?.priority}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert?.kpi}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert.pool ?? ''}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert?.value}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert?.isNew ? 'New' : 'Updated'}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert.green ?? ''}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert.yellow ?? ''}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert.orange ?? ''}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert.red ?? ''}</TableCell>
+                    {filteredNewAlerts.length > 0 ? (
+                        filteredNewAlerts.map((alert, index) => (
+                            <TableRow key={index}>
+                                <TableCell style={styles.tableCell}>{new Date(alert.timestamp).toLocaleString()}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert?.host_name}</TableCell>
+                                <TableCell style={getCellStyle(alert.prevPriority || alert.priority)}>{alert.prevPriority || alert.priority}</TableCell>
+                                <TableCell style={getCellStyle(alert?.priority)}>{alert?.priority}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert?.kpi}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.pool ?? ''}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert?.value}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert?.isNew ? 'New' : 'Updated'}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.green ?? ''}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.yellow ?? ''}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.orange ?? ''}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.red ?? ''}</TableCell>
+                            </TableRow>
+                        ))
+                    ) : (
+                        <TableRow>
+                            <TableCell colSpan={12} style={{ ...styles.tableCell, textAlign: 'center' }}>
+                                No alerts match the current filters
+                            </TableCell>
                         </TableRow>
-                    ))}
+                    )}
                 </TableBody>
             </Table>
             
@@ -478,22 +525,30 @@ const Notifications = () => {
                     </TableRow>
                 </TableHead>
                 <TableBody>
-                    {filteredAllAlerts.map((alert, index) => (
-                        <TableRow key={index}>
-                            <TableCell style={styles.tableCell}>{new Date(alert.timestamp).toLocaleString()}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert?.host_name}</TableCell>
-                            <TableCell style={getCellStyle(alert.prevPriority || alert.priority)}>{alert.prevPriority || alert.priority}</TableCell>
-                            <TableCell style={getCellStyle(alert?.priority)}>{alert?.priority}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert?.kpi}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert.pool ?? ''}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert?.value}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert?.isNew ? 'New' : 'Updated'}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert.green ?? ''}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert.yellow ?? ''}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert.orange ?? ''}</TableCell>
-                            <TableCell style={styles.tableCell}>{alert.red ?? ''}</TableCell>
+                    {filteredAllAlerts.length > 0 ? (
+                        filteredAllAlerts.map((alert, index) => (
+                            <TableRow key={index}>
+                                <TableCell style={styles.tableCell}>{new Date(alert.timestamp).toLocaleString()}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert?.host_name}</TableCell>
+                                <TableCell style={getCellStyle(alert.prevPriority || alert.priority)}>{alert.prevPriority || alert.priority}</TableCell>
+                                <TableCell style={getCellStyle(alert?.priority)}>{alert?.priority}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert?.kpi}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.pool ?? ''}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert?.value}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert?.isNew ? 'New' : 'Updated'}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.green ?? ''}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.yellow ?? ''}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.orange ?? ''}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.red ?? ''}</TableCell>
+                            </TableRow>
+                        ))
+                    ) : (
+                        <TableRow>
+                            <TableCell colSpan={12} style={{ ...styles.tableCell, textAlign: 'center' }}>
+                                No alerts match the current filters
+                            </TableCell>
                         </TableRow>
-                    ))}
+                    )}
                 </TableBody>
             </Table>
         </Paper>
