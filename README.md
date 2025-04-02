@@ -1,367 +1,426 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, Typography, Grid, Popover, Table, TableHead, TableBody, TableRow, TableCell, Box, Modal, IconButton, TextField, Button } from '@mui/material';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import CloseIcon from '@mui/icons-material/Close';
+import SsidChartIcon from '@mui/icons-material/SsidChart';
+import Node from './Node';
 
-// Updated mapping for data centers
-const REGIONS_MAPPING = {
-  'HYDERABAD': 'HYDERABAD',
-  'BANGALORE': 'BANGALORE',
-  'INDORE': 'INDORE',
-  'MUMBAI': 'MUMBAI',
-};
+// Updated component for Data Center (formerly Region)
+const Region = ({ region, nodes }) => {
+    const [openChart, setOpenChart] = useState(false);
+    const [expanded, setExpanded] = useState(false);
+    const [showRegion, setShowRegion] = useState(false);
+    const [health, setHealth] = useState({
+        health: 'normal',
+        nodes: 0,
+        criticals: 0,
+        major: 0,
+        oor: 0,
+        normal: 0,
+        backgroundColor: '#198754'
+    });
 
-// Create context with default values
-export const NodeContext = createContext({
-  nodes: {},
-  setNodes: () => {},
-  basefilters: { nodetype: ['All'], regions: ['All'], pools: ['All'] },
-  filters: { nodetype: 'All', regions: 'All', pools: 'All' },
-  setFilters: () => {},
-  filteredNodes: {},
-  hasFilters: false,
-  resetFilters: () => {},
-  setSearch: () => {},
-  dataLoading: false,
-  syncNotes: () => {},
-  oor: true,
-  toggleOOR: () => {},
-  alerts: [],
-  allAlerts: [],
-  notifications: false,
-  setNotifications: () => {},
-  error: false,
-  setPriorityFilter: () => {},
-  setDegradedNodes: () => {},
-  priorityFilter: ['normal', 'oor', 'major', 'critical'],
-  degradedNodes: false,
-  setNotificationsFilter: () => {},
-  notificationsFilter: {priorities: ['critical'], timeRange: '1hr'},
-  setFilteredNotifications: () => {},
-  filteredNotifications: { allAlerts: [], alerts: [] }
-});
-
-// Generate mock data with new platforms and data centers
-const generateMockData = () => {
-  const platforms = ['SONY', 'ZEE', 'STAR', 'KNITE'];
-  const priorities = ['normal', 'oor', 'major', 'critical'];
-  const dataCenters = ['HYDERABAD', 'BANGALORE', 'INDORE', 'MUMBAI'];
-  
-  let nodes = [];
-  
-  dataCenters.forEach(dataCenter => {
-    // Generate 5-10 nodes per data center
-    const nodeCount = Math.floor(Math.random() * 6) + 5;
+    const [anchorEl, setAnchorEl] = React.useState(null);
+    const [healthEl, setHealthEl] = React.useState(null);
     
-    for (let i = 0; i < nodeCount; i++) {
-      const platform = platforms[Math.floor(Math.random() * platforms.length)];
-      const priority = priorities[Math.floor(Math.random() * priorities.length)];
-      
-      nodes.push({
-        host_name: `${platform}-${dataCenter.substring(0, 3)}-${i + 1}`,
-        priority: priority,
-        nodetype: platform.toLowerCase(),  // Using platform as nodetype
-        pool: dataCenter,                  // Using data center as pool
-        timezone: dataCenter,
-        nestStatus: 'inservice',
-        notes: Math.random() > 0.7 ? [{
-          notes: `Test note for ${platform}-${dataCenter.substring(0, 3)}-${i + 1}`,
-          updated_by: 'Test, User',
-          updated_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-        }] : [],
-        stats: Math.random() > 0.5 ? generateMockStats(platform) : null
-      });
-    }
-  });
-  
-  return nodes;
-};
+    // Define a safe version of nodes
+    const safeNodes = Array.isArray(nodes) ? nodes : [];
 
-// Generate mock stats
-const generateMockStats = (platform) => {
-  const kpis = ['STREAM_ATTEMPT', 'LOGIN_SUCCESS', 'ACTIVE_USERS', 'CONTENT_VIEW'];
-  const panels = [1, 2];
-  
-  let stats = {};
-  
-  for (let i = 0; i < Math.floor(Math.random() * 3) + 1; i++) {
-    const kpi = kpis[Math.floor(Math.random() * kpis.length)];
-    const panel = panels[Math.floor(Math.random() * panels.length)];
-    const id = `stats-${kpi}-${i}`;
-    
-    stats[id] = {
-      kpi: kpi,
-      rate: Math.floor(Math.random() * 100),
-      avg: Math.floor(Math.random() * 100),
-      att: Math.floor(Math.random() * 1000),
-      panel: panel,
-      priority: Math.random() > 0.7 ? 'critical' : Math.random() > 0.5 ? 'major' : 'normal',
-      time_value: new Date().toISOString()
-    };
-  }
-  
-  return stats;
-};
-
-const groupByPool = (data) => {
-  return data.reduce((acc, curr) => {
-    if (!acc[curr.pool]) {
-      acc[curr.pool] = [];
-      acc[curr.pool].push(curr);
-    } else {
-      acc[curr.pool].push(curr);
-    }
-
-    return acc
-  }, {})
-};
-
-const getFilters = (data) => {
-  return data.reduce((acc, curr) => {
-    if (acc.pools.indexOf(curr.pool) === -1) {
-      acc.pools.push(curr.pool)
-    }
-
-    if (acc.nodetype.indexOf(curr.nodetype) === -1) {
-      acc.nodetype.push(curr.nodetype)
-    }
-
-    if (acc.regions.indexOf(curr.timezone) === -1) {
-      acc.regions.push(curr.timezone)
-    }
-
-    return acc
-  }, {
-    nodetype: ['All'],
-    regions: ['All'],
-    pools: ['All'],
-  })
-};
-
-const groupByRegions = (data) => {
-  return data.reduce((acc, curr) => {
-    const largerRegion = REGIONS_MAPPING[curr.pool];
-
-    if (!acc[largerRegion]) {
-      acc[largerRegion] = {};
-    }
-
-    if (!acc[largerRegion][curr.pool]) {
-      acc[largerRegion][curr.pool] = [];
-    }
-
-    acc[largerRegion][curr.pool].push(curr);
-
-    return acc;
-  }, {});
-};
-
-export const NodeProvider = ({ children }) => {
-  const [data, setData] = useState([]);
-  const [dataLoading, setDataLoading] = useState(false);
-  const [oor, toggleOOR] = useState(localStorage.getItem('oor') === 'true' ? true : false);
-  const [allAlerts, setAllAlerts] = useState([]);
-  const [alerts, setAlerts] = useState([]);
-  const [notifications, setNotifications] = useState(false);
-  const [error, setError] = useState(false);
-  const [priorityFilter, setPriorityFilter] = useState(['normal', 'oor', 'major', 'critical']);
-  const [notificationsFilter, setNotificationsFilter] = useState({priorities: ['critical'], timeRange: '1hr'});
-
-  // Initialize with empty objects to prevent null issues
-  const [nodes, setNodes] = useState({});
-  const [basefilters, setBasefilters] = useState({
-    nodetype: ['All'],
-    regions: ['All'],
-    pools: ['All'],
-  });
-  const [filteredNodes, setFilteredNodes] = useState({});
-  const [hasFilters, setHasFilters] = useState(false);
-  const [filters, setFilters] = useState({
-    nodetype: 'All',
-    regions: 'All',
-    pools: 'All',
-  });
-
-  // Load mock data on initial render
-  useEffect(() => {
-    loadMockData();
-  }, []);
-
-  // Function to load mock data
-  const loadMockData = () => {
-    setDataLoading(true);
-    
-    // Generate mock data immediately
-    const mockData = generateMockData();
-    
-    // Set initial data for pool grouping
-    const poolData = groupByPool(mockData);
-    setNodes(poolData);
-    
-    // Set the rest of the data with a short delay
-    setTimeout(() => {
-      setData(mockData);
-      setBasefilters(getFilters(mockData));
-      setFilteredNodes(groupByRegions(mockData));
-      setDataLoading(false);
-      
-      // Generate some mock alerts
-      const mockAlerts = mockData
-        .filter(node => node.priority === 'critical' || node.priority === 'major')
-        .slice(0, 5)
-        .map(node => ({
-          host_name: node.host_name,
-          priority: node.priority,
-          prevPriority: 'normal',
-          isNew: Math.random() > 0.5,
-          timestamp: new Date().toISOString(),
-          kpi: 'STREAM_ATTEMPT'
-        }));
-      
-      setAlerts(mockAlerts);
-      setAllAlerts(mockAlerts);
-    }, 500);
-  };
-
-  // Update nodes when data or OOR filter changes
-  useEffect(() => {
-    if (data.length) {
-      if (oor) {
-        const temp = data.filter(_ => _.nestStatus?.toLowerCase() === 'inservice');
-        setNodes(groupByPool(temp));
-        setBasefilters(getFilters(temp));
-        setFilteredNodes(groupByRegions(temp));
-      } else {
-        setNodes(groupByPool(data));
-        setBasefilters(getFilters(data));
-        setFilteredNodes(groupByRegions(data));
-      }
-    }
-  }, [data, oor]);
-
-  // Process filters based on user selections
-  const processFilters = (filters) => {
-    if (Object.keys(filters).length && data.length) {
-      let filtered = data.filter((node) => {
-        if (filters.nodetype && filters.nodetype !== 'All' && filters.nodetype !== node.nodetype) {
-          return false
-        } else if (filters.regions && filters.regions !== 'All' && filters.regions !== node.pool) {
-          return false
-        } else if (filters.pools && filters.pools !== 'All' && filters.pools !== node.pool) {
-          return false
+    const handlePopoverOpen = (event) => {
+        // Only show popover if there are critical or major nodes
+        if (safeNodes.filter(_ => _.priority && _.priority !== 'normal' && _.priority !== 'oor').length === 0) {
+            return;
         }
+        setAnchorEl(event.currentTarget);
+    };
 
-        return true;
-      });
+    const handlePopoverClose = () => {
+        setAnchorEl(null);
+    };
 
-      if (filters.nodetype !== 'All' || filters.regions !== 'All' || filters.pools !== 'All' || filtered.length !== data.length) {
-        setHasFilters(true);
-      } else {
-        setHasFilters(false);
-      }
+    const open = Boolean(anchorEl);
 
-      if (oor) {
-        filtered = filtered?.filter(_ => _.nestStatus?.toLowerCase() === 'inservice');
-      }
+    const handleHealthPopoverOpen = (event) => {
+        setHealthEl(event.currentTarget);
+    };
 
-      if (priorityFilter.length > 0) {
-        filtered = filtered?.filter(_ => priorityFilter.includes(_.priority));
-      }
+    const handleHealthPopoverClose = () => {
+        setHealthEl(null);
+    };
 
-      setFilteredNodes(groupByRegions(filtered));
-      setNodes(groupByPool(filtered));
-    } else {
-      setFilteredNodes(groupByRegions(data));
-      setHasFilters(false);
-      setNodes(groupByPool(data));
-    }
-  }
+    const healthOpen = Boolean(healthEl);
 
-  // Apply filters when they change
-  useEffect(() => {
-    if (data.length) {
-      processFilters(filters);
-    }
-  }, [filters, oor, priorityFilter, data]);
+    const containerStyle = {
+        display: 'inline-block',
+        verticalAlign: 'top',
+        width: '25%',
+        transition: 'width 0.3s',
+    };
 
-  // Reset filters function
-  const resetFilters = () => {
-    setFilters({ nodetype: 'All', regions: 'All', pools: 'All' });
-  }
+    useEffect(() => {
+        if (expanded) {
+            setShowRegion(false);
+        } else {
+            setShowRegion(true);
+        }
+    }, [expanded]);
 
-  // Search functionality
-  const setSearch = (search) => {
-    if (search) {
-      const nodeFiltered = data.filter(_ => _.host_name?.toLowerCase()?.includes(search?.toLowerCase()));
-      const poolFiltered = data.filter(_ => _.pool?.toLowerCase()?.includes(search?.toLowerCase()));
-      const seen = {};
-      const filtered = [...nodeFiltered, ...poolFiltered].filter(item => !(item.host_name in seen) && (seen[item.host_name] = true));
-      setHasFilters(true);
-      setFilteredNodes(groupByRegions(filtered));
-      setNodes(groupByPool(filtered));
-    } else {
-      processFilters(filters);
-    }
-  }
+    const getPoolHealth = () => {
+        try {
+            const pr = safeNodes.map(node => node.priority || 'normal');
+            const total = safeNodes.length;
+            const criticals = pr.filter(_ => _ === 'critical')?.length || 0;
+            const major = pr.filter(_ => _ === 'major')?.length || 0;
+            const oor = pr.filter(_ => _ === 'oor')?.length || 0;
+            const normal = pr.filter(_ => _ === 'normal')?.length || 0;
+            let health = 'normal';
+            let background = '#198754';
 
-  // Mock function for syncing notes
-  const syncNotes = () => {
-    console.log("Sync notes called");
-    // Reload mock data to simulate sync
-    loadMockData();
-  }
+            if (criticals || major) {
+                const cpr = Math.round((criticals / total) * 100);
+                const mpr = Math.round((major / total) * 100);
+                const ovr = Math.round(((criticals + major) / total) * 100);
 
-  const [degradedNodes, setDegradedNodes] = useState(false);
+                if (cpr >= 20) {
+                    health = 'critical';
+                    background = '#ff0040';
+                } else if (mpr >= 20) {
+                    health = 'major';
+                    background = '#f2630a';
+                } else if (ovr >= 20) {
+                    health = 'critical';
+                    background = '#ff0040';
+                }
+            }
 
-  // Update priority filter when degraded nodes changes
-  useEffect(() => {
-    if (degradedNodes) {
-      setPriorityFilter(['critical', 'major']);
-    } else {
-      setPriorityFilter(['normal', 'oor', 'major', 'critical']);
-    }
-  }, [degradedNodes]);
+            setHealth({
+                health,
+                nodes: total,
+                criticals,
+                major,
+                oor,
+                normal,
+                background
+            });
+        } catch (error) {
+            console.error("Error calculating health:", error);
+            // Set default health if error occurs
+            setHealth({
+                health: 'normal',
+                nodes: safeNodes.length,
+                criticals: 0,
+                major: 0,
+                oor: 0,
+                normal: safeNodes.length,
+                background: '#198754'
+            });
+        }
+    };
 
-  // Process notifications filters
-  const [filteredNotifications, setFilteredNotifications] = useState({
-    allAlerts: [],
-    alerts: [],
-  });
+    useEffect(() => {
+        getPoolHealth();
+    }, [nodes]);
 
-  useEffect(() => {
-    setFilteredNotifications({allAlerts: allAlerts, alerts: alerts});
-  }, [notificationsFilter, alerts, allAlerts]);
+    const getColorPriority = () => {
+        try {
+            const pr = safeNodes.map(node => node.priority || 'normal');
+            const priority = [...new Set(pr)];
+            if (priority.length > 0) {
+                if (priority.indexOf('critical') !== -1) {
+                    return '#ff0040';
+                } else if (priority.indexOf('major') !== -1) {
+                    return '#f2630a';
+                } else if (priority.indexOf('minor') !== -1) {
+                    return '#ffbf00';
+                } else if (priority.indexOf('normal') !== -1) {
+                    return '#198754';
+                } else if (priority.indexOf('oor') !== -1) {
+                    return '#198754';
+                } else {
+                    return 'darkgray';
+                }
+            } else {
+                return 'rgb(128, 128, 128)';
+            }
+        } catch (error) {
+            console.error("Error getting color priority:", error);
+            return 'rgb(128, 128, 128)';
+        }
+    };
 
-  return (
-    <NodeContext.Provider 
-      value={{ 
-        nodes, 
-        setNodes, 
-        basefilters, 
-        filters, 
-        setFilters, 
-        filteredNodes, 
-        hasFilters, 
-        resetFilters, 
-        setSearch, 
-        dataLoading, 
-        syncNotes, 
-        oor, 
-        toggleOOR, 
-        alerts, 
-        allAlerts, 
-        notifications, 
-        setNotifications, 
-        error, 
-        setPriorityFilter, 
-        setDegradedNodes, 
-        priorityFilter, 
-        degradedNodes, 
-        setNotificationsFilter, 
-        notificationsFilter, 
-        setFilteredNotifications, 
-        filteredNotifications
-      }}
-    >
-      {children}
-    </NodeContext.Provider>
-  );
+    const getHealthColor = () => {
+        try {
+            if (health?.health === 'normal') {
+                if (health?.criticals > 0) {
+                    return '#ff0040';
+                } else if (health?.major > 0) {
+                    return '#f2630a';
+                } else {
+                    return 'white';
+                }
+            } else {
+                return 'white';
+            }
+        } catch (error) {
+            console.error("Error getting health color:", error);
+            return 'white';
+        }
+    };
+
+    const modal = {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        minWidth: 400,
+        bgcolor: 'background.paper',
+        border: '2px solid #000',
+        boxShadow: 24,
+        padding: 4,
+        width: '75%',
+        maxHeight: '85vh', 
+        overflowY: 'auto',
+    };
+
+    return (
+        <div style={containerStyle}>
+            {showRegion && (
+                <>
+                    <Card
+                        style={{
+                            border: '2px solid black',
+                            margin: '4px',
+                            backgroundColor: health?.background || getColorPriority(),
+                            color: 'white',
+                            cursor: 'pointer'
+                        }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setAnchorEl(null);
+                            setExpanded(!expanded);
+                        }}
+                    >
+                        <CardContent style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <Typography 
+                                sx={{ width: 'auto', display: 'inline-block' }}
+                                aria-owns={open ? 'mouse-over-popover' : undefined}
+                                aria-haspopup="true"
+                                onMouseEnter={handlePopoverOpen}
+                                onMouseLeave={handlePopoverClose} 
+                                variant="h6"
+                            >
+                                {region}
+                            </Typography>
+                            <Box>
+                                <SsidChartIcon 
+                                    style={{marginRight: '8px', cursor: 'pointer'}} 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenChart(true);
+                                    }} 
+                                />
+                                <MonitorHeartIcon 
+                                    aria-owns={healthOpen ? 'health-popover' : undefined}
+                                    aria-haspopup="true" 
+                                    onMouseEnter={handleHealthPopoverOpen}
+                                    onMouseLeave={handleHealthPopoverClose} 
+                                    style={{color: getHealthColor()}} 
+                                />
+                            </Box>
+                        </CardContent>
+                    </Card>
+                    
+                    {/* Popover for degraded nodes */}
+                    <Popover
+                        id="mouse-over-popover"
+                        sx={{pointerEvents: 'none'}}
+                        open={open}
+                        anchorEl={anchorEl}
+                        anchorOrigin={{
+                            vertical: 'bottom',
+                            horizontal: 'left',
+                        }}
+                        transformOrigin={{
+                            vertical: 'top',
+                            horizontal: 'left',
+                        }}
+                        onClose={handlePopoverClose}
+                        disableRestoreFocus
+                    >
+                        <Card>
+                            <CardContent>
+                                <Grid container>
+                                    {safeNodes
+                                        .filter(_ => _.priority && _.priority !== 'normal' && _.priority !== 'oor')
+                                        .map(node => (
+                                            <Node 
+                                                style={{
+                                                    minWidth: '32.85%', 
+                                                    minHeight: 60,
+                                                    border: '1px solid black',
+                                                    borderRadius: 0,
+                                                    margin: '1px',
+                                                }} 
+                                                key={node.host_name || 'unknown'} 
+                                                node={node} 
+                                            />
+                                        ))
+                                    }
+                                </Grid>
+                            </CardContent>
+                        </Card>
+                    </Popover>
+                    
+                    {/* Health stats popover */}
+                    <Popover
+                        id="health-popover"
+                        sx={{pointerEvents: 'none'}}
+                        open={healthOpen}
+                        anchorEl={healthEl}
+                        anchorOrigin={{
+                            vertical: 'bottom',
+                            horizontal: 'left',
+                        }}
+                        transformOrigin={{
+                            vertical: 'top',
+                            horizontal: 'left',
+                        }}
+                        onClose={handleHealthPopoverClose}
+                        disableRestoreFocus
+                    >
+                        <Card>
+                            <CardContent style={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                flexDirection: 'column'
+                            }}>
+                                <Typography sx={{ width: 'auto', display: 'inline-block', textAlign: 'center' }} variant="h6">
+                                    Data Center Stats
+                                </Typography>
+                                <Table>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell>Nodes</TableCell>
+                                            <TableCell>Count</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        <TableRow>
+                                            <TableCell>Critical</TableCell>
+                                            <TableCell>{health?.criticals}</TableCell>
+                                        </TableRow>
+                                        <TableRow>
+                                            <TableCell>Major</TableCell>
+                                            <TableCell>{health?.major}</TableCell>
+                                        </TableRow>
+                                        <TableRow>
+                                            <TableCell>OOR</TableCell>
+                                            <TableCell>{health?.oor}</TableCell>
+                                        </TableRow>
+                                        <TableRow>
+                                            <TableCell>Normal</TableCell>
+                                            <TableCell>{health?.normal}</TableCell>
+                                        </TableRow>
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    </Popover>
+                </>
+            )}
+            
+            {/* Expanded view showing all nodes */}
+            {expanded && (
+                <Card style={{
+                    border: '2px solid black',
+                    margin: '4px'
+                }}>
+                    <CardContent>
+                        <Grid container spacing={1}>
+                            {!showRegion && (
+                                <Node
+                                    style={{
+                                        backgroundColor: 'lightgray', 
+                                        minWidth: '32.85%', 
+                                        minHeight: 35,
+                                        border: '1px solid black',
+                                        borderRadius: 0,
+                                        margin: '1px'
+                                    }} 
+                                    key={region} 
+                                    node={{ host_name: region }} 
+                                    color={'black'} 
+                                    bgcolor={'lightgray'} 
+                                    onClick={() => setExpanded(!expanded)} 
+                                    enableContextMenu={false} 
+                                />
+                            )}
+                            {safeNodes.map(node => (
+                                <Node 
+                                    style={{
+                                        minWidth: '32.85%', 
+                                        minHeight: 35,
+                                        border: '1px solid black',
+                                        borderRadius: 0,
+                                        margin: '1px'
+                                    }} 
+                                    key={node.host_name || `node-${Math.random()}`} 
+                                    node={node} 
+                                />
+                            ))}
+                        </Grid>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Charts modal */}
+            <Modal
+                open={openChart}
+                onClose={() => { setOpenChart(false); }}
+                aria-labelledby="chart-modal-title"
+                aria-describedby="chart-modal-description"
+            >
+                <Box sx={modal}>
+                    <Box sx={{display: 'flex', justifyContent: 'space-between', color: '#d6006e'}}>
+                        <Typography id="chart-modal-title" variant="h6" component="h2">
+                            {region} - Platform Performance
+                        </Typography>
+                        <IconButton sx={{ color: '#d6006e' }} onClick={() => { setOpenChart(false); }}>
+                            <CloseIcon />
+                        </IconButton>
+                    </Box>
+                    
+                    {/* Placeholder charts */}
+                    <Box sx={{ mt: 4 }}>
+                        {['SONY', 'ZEE', 'STAR', 'KNITE'].map((platform, index) => (
+                            <Box 
+                                key={platform}
+                                sx={{ 
+                                    width: '100%', 
+                                    height: '200px', 
+                                    mb: 2, 
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    backgroundColor: '#f5f5f5',
+                                    border: '1px solid #ddd',
+                                    borderRadius: '4px'
+                                }}
+                            >
+                                <Typography variant="h6" color="#d6006e">
+                                    {platform} Performance Dashboard for {region}
+                                </Typography>
+                            </Box>
+                        ))}
+                    </Box>
+                </Box>
+            </Modal>
+        </div>
+    );
 };
+
+export default Region;
