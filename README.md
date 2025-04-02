@@ -4,42 +4,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import NoteAddIcon from '@mui/icons-material/NoteAdd';
 import CommentIcon from '@mui/icons-material/Comment';
-
-// Create a simple KPI Modal Content component if you don't have one
-const SimpleKPIModalContent = ({ node }) => {
-  return (
-    <Box sx={{ p: 2, minWidth: 300 }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        {node.host_name} Statistics
-      </Typography>
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="subtitle1">Platform: {node.nodetype?.toUpperCase()}</Typography>
-        <Typography variant="subtitle1">Data Center: {node.pool}</Typography>
-        <Typography variant="subtitle1">Status: {node.nestStatus}</Typography>
-        <Typography variant="subtitle1">Priority: {node.priority}</Typography>
-      </Box>
-      
-      {node.stats ? (
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="subtitle1" sx={{ mb: 1 }}>KPI Metrics:</Typography>
-          {Object.keys(node.stats).map((key) => {
-            const stat = node.stats[key];
-            return (
-              <Box key={key} sx={{ mb: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
-                <Typography variant="body2">KPI: {stat.kpi}</Typography>
-                <Typography variant="body2">Rate: {stat.rate}%</Typography>
-                <Typography variant="body2">Average: {stat.avg}%</Typography>
-                <Typography variant="body2">Attempts: {stat.att}</Typography>
-              </Box>
-            );
-          })}
-        </Box>
-      ) : (
-        <Typography>No statistics available</Typography>
-      )}
-    </Box>
-  );
-};
+import KPIModalContent from './KPIModalContent'; // Import the existing KPIModalContent
 
 const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }) => {
   const [contextMenu, setContextMenu] = useState(null);
@@ -58,7 +23,6 @@ const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }
     if (!enableContextMenu) {
       return;
     }
-    console.log("Hover detected");
     setAnchorEl(event.currentTarget);
   };
 
@@ -73,13 +37,11 @@ const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }
 
   // Handle mouse entering popover
   const handleMouseEnterPopover = () => {
-    console.log("Mouse entered popover");
     setMouseIsOver(true);
   };
 
   // Handle mouse leaving popover
   const handleMouseLeavePopover = () => {
-    console.log("Mouse left popover");
     setMouseIsOver(false);
     setAnchorEl(null);
   };
@@ -126,6 +88,26 @@ const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }
     }
   };
 
+  // Create dummy data structure for stats that KPIModalContent expects
+  const groupedStats = (stats) => {
+    if (!stats) {
+      return undefined;
+    }
+
+    const panels = Object.values(stats)?.reduce((acc, curr) => {
+      if (!acc[curr.panel]) {
+        acc[curr.panel] = [];
+        acc[curr.panel].push(curr);
+      } else {
+        acc[curr.panel].push(curr);
+      }
+
+      return acc;
+    }, {});
+
+    return panels;
+  };
+
   return (
     <>
       <Card 
@@ -134,8 +116,9 @@ const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }
           ...style,
           backgroundColor: bgcolor || getColorPriority(safePriority),
           color: color || 'white',
-          cursor: 'context-menu'
-        }} 
+          cursor: 'context-menu',
+          transition: 'all 0.2s ease-in-out'
+        }}
         onClick={onClick} 
         onContextMenu={handleContextMenu}
       >
@@ -178,14 +161,38 @@ const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }
         }}
         onClose={handlePopoverClose}
         disableRestoreFocus
-        sx={{ pointerEvents: 'none' }}
+        sx={{ 
+          pointerEvents: 'none',
+          '& .MuiPopover-paper': {
+            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+            borderRadius: '8px',
+            border: '1px solid #e0e0e0',
+            maxWidth: '600px',
+            overflow: 'hidden',
+            animation: 'fadeIn 0.2s ease-in-out',
+            '@keyframes fadeIn': {
+              '0%': {
+                opacity: 0,
+                transform: 'translateY(10px)'
+              },
+              '100%': {
+                opacity: 1,
+                transform: 'translateY(0)'
+              },
+            },
+          }
+        }}
       >
         <Box 
           onMouseEnter={handleMouseEnterPopover}
           onMouseLeave={handleMouseLeavePopover}
-          sx={{ pointerEvents: 'auto' }}
+          sx={{ 
+            pointerEvents: 'auto',
+            backgroundColor: '#ffffff',
+          }}
         >
-          <SimpleKPIModalContent node={safeNode} />
+          {/* Use the existing KPIModalContent component */}
+          <KPIModalContent node={safeNode} data={groupedStats(safeNode.stats)} />
         </Box>
       </Popover>
 
@@ -226,3 +233,98 @@ const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }
 };
 
 export default Node;
+
+// In KPIModalContent.jsx
+// Adjust the styles object to make it fit better in a popover
+
+const styles = {
+    table: {
+        borderCollapse: 'collapse',
+        border: '1px solid #e0e0e0',
+        minWidth: 350,
+        maxWidth: '100%',
+    },
+    tableHead: {
+        backgroundColor: '#d6006e',
+        color: '#fff'
+    },
+    tableCell: {
+        border: '1px solid #e0e0e0',
+        padding: '4px 8px', // Slightly smaller padding for popover
+        color: 'inherit',
+        fontSize: '12px',
+    },
+    tableCellColored: {
+        border: '1px solid #e0e0e0',
+        padding: '4px 8px',
+        backgroundColor: '#d6006e',
+        color: 'white',
+        fontSize: '12px',
+    },
+};
+
+// Make the component more compact for popover display
+const KPIModalContent = React.memo(({ node, data }) => {
+    // Rest of your component code...
+    
+    return (
+        <>
+            <Table style={styles.table}>
+                <TableHead style={styles.tableHead}>
+                    <TableRow>
+                        <TableCell style={styles.tableCell}>Node Name</TableCell>
+                        <TableCell style={styles.tableCell}>Sync Time</TableCell>
+                        <TableCell style={styles.tableCell}>Status</TableCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody>
+                    <TableRow>
+                        <TableCell style={styles.tableCell}>{node?.host_name}</TableCell>
+                        <TableCell style={styles.tableCell}>{showTime(Object.values(node?.stats || {})[0]?.time_value)}</TableCell>
+                        <TableCell style={styles.tableCell}>{node?.nestStatus || 'NA'}</TableCell>
+                    </TableRow>
+                    {
+                        node?.notes?.length > 0 && (
+                            <TableRow>
+                                <TableCell style={styles.tableCellColored}>Latest Note</TableCell>
+                                <TableCell style={styles.tableCell}>{node?.notes[0]?.notes || ''}</TableCell>
+                                <TableCell style={styles.tableCell}>{node?.notes[0] ? noteInfo(node?.notes[0]) : ''}</TableCell>
+                            </TableRow>
+                        )
+                    }
+                </TableBody>
+            </Table>
+            <Box sx={{
+                display: 'flex',
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                justifyContent: 'flex-start',
+                gap: '8px',
+                p: 1
+            }}>
+                {
+                    data && Object.keys(data).length > 0 ? (
+                        Object.values(data).map((kpis, index) => (
+                            <Table key={index} style={styles.table}>
+                                <TableHead style={styles.tableHead}>
+                                    <TableRow>
+                                        {tableHeaders.map((header, index) => (
+                                            <TableCell key={index} style={styles.tableCell}>{header}</TableCell>
+                                        ))}
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {getTableData(kpis)}
+                                </TableBody>
+                            </Table>
+                        ))
+                    ) : (
+                        <Box sx={{ p: 2, width: '100%', textAlign: 'center' }}>
+                            <Typography variant="body2">No KPI data available</Typography>
+                        </Box>
+                    )
+                }
+            </Box>
+        </>
+    );
+});
