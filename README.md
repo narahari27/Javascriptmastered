@@ -1,171 +1,181 @@
-import React, { useContext, useEffect } from 'react';
-import { Button, ButtonGroup, Typography, Modal, Box, Link, IconButton, Badge } from '@mui/material';
-import { useMsal } from '@azure/msal-react';
-import { NodeContext } from "../NodeContext";
-import LogoutIcon from '@mui/icons-material/Logout';
-import CloseIcon from '@mui/icons-material/Close';
-import NotificationsIcon from '@mui/icons-material/Notifications';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { AuthenticatedTemplate } from "@azure/msal-react";
-import { AllowedContent, NotAllowedContent, RoleLayout } from './auth/RoleLayout';
-import { logoutRequest } from '../AuthConfig';
-import LanguageIcon from '@mui/icons-material/Language';
+import React, { useEffect, useState } from 'react';
+import { Table, TableHead, TableBody, TableRow, TableCell, Box, Typography } from '@mui/material';
+import moment from 'moment-timezone';
 
-const modalNotes = {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    minWidth: 400,
-    bgcolor: 'background.paper',
-    border: '2px solid #000',
-    boxShadow: 24,
-    p: 4,
+const ptTimeZone = 'America/Los_Angeles';
+
+const styles = {
+    table: {
+        borderCollapse: 'collapse',
+        border: '1px solid #e0e0e0',
+        minWidth: 400,
+    },
+    tableHead: {
+        backgroundColor: '#d6006e',
+        color: '#fff'
+    },
+    tableCell: {
+        border: '1px solid #e0e0e0',
+        padding: '2px',
+        color: 'inherit',
+        fontSize: '12px',
+    },
+    tableCellColored: {
+        border: '1px solid #e0e0e0',
+        padding: '2px',
+        backgroundColor: '#d6006e',
+        color: 'white',
+        fontSize: '12px',
+    },
 };
 
-const Header = () => {
-    const { instance } = useMsal();
-    const [openNotes, setOpenNotes] = React.useState(false);
-    const context = useContext(NodeContext);
+const KPIModalContent = React.memo(({ node, data }) => {
+    const keys = Object.keys(data ?? {});
+    // const tableHeaders = ['KPI', 'SR%', 'Avg%', 'Attempts', 'Avg Att', '15 Min KCI', 'Current/Average'];
+    const tableHeaders = ['KPI', 'SR%', 'Avg%', 'Attempts'];
 
-    const handleLogout = async () => {
-        try {
-            window?.localStorage?.setItem('isLoggedIn', 'false');
-            window?.localStorage?.removeItem('loginTime');
-            await instance.logoutRedirect();
-        } catch (error) {
-            console.error('Logout error:', error);
+    const getColorPriority = (priority) => {
+        switch (priority) {
+            case 'critical':
+                return '#ff0040';
+            case 'major':
+                return '#f2630a';
+            case 'minor':
+                return '#ffbf00';
+            case 'oor':
+                return '#0a58ca';
+            case 'normal':
+                return '#198754';
+
+            default:
+                return '#000';
         }
+    }
+
+    const getCellStyle = (data) => {
+        return {
+            border: '1px solid #e0e0e0',
+            padding: '2px',
+            color: getColorPriority(data?.priority),
+            fontSize: '12px',
+        };
     };
 
-    useEffect(() => {
-        // Function to check if 12 hours have passed
-        function checkTimeout(startTime) {
-            var currentTime = new Date().getTime();
-            var elapsedTime = currentTime - startTime;
-            var twelveHoursInMillis = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
-            return elapsedTime >= twelveHoursInMillis;
-        }
-
-        // Calculate remaining time until 12 hours mark
-        function calculateRemainingTime(startTime) {
-            var currentTime = new Date().getTime();
-            var elapsedTime = currentTime - startTime;
-            var twelveHoursInMillis = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
-            var remainingTime = twelveHoursInMillis - elapsedTime;
-            return remainingTime;
-        }
-
-        if (!window.localStorage.getItem('loginTime')) {
-            window.localStorage.setItem('loginTime', new Date());
-        }
-
-        let startTime = new Date(window.localStorage.getItem('loginTime')) ? Number(new Date(window.localStorage.getItem('loginTime'))) : new Date().getTime(); // Record the starting time
-
-        // Calculate remaining time
-        let remainingTime = calculateRemainingTime(startTime);
-
-        var interval = setTimeout(function checkTimeoutHandler() {
-            if (checkTimeout(startTime)) {
-                handleLogout();
+    const sort_by_id = (key) => {
+        return function (elem1, elem2) {
+            if (elem1[key] < elem2[key]) {
+                return -1;
+            } else if (elem1[key] > elem2[key]) {
+                return 1;
             } else {
-                remainingTime = calculateRemainingTime(startTime);
-                console.log('Remainig time: ', remainingTime);
-                interval = setTimeout(checkTimeoutHandler, remainingTime);
+                return 0;
             }
-        }, remainingTime);
+        };
+    }
 
-        // const logoutTimeout = setTimeout(() => {   
-        //     handleLogout();
-        // }, 12 * 60 * 60 * 1000);
+    const showTime = (date) => {
+        if (date) {
+            return moment(new Date(date)).tz(ptTimeZone).subtract(5, 'hours').format('MM/DD/YYYY HH:mm');
+        } else {
+            return '';
+        }
+    }
 
-        // const logoutTimeout = setTimeout(() => {
-        //     debugger    
-        //     handleLogout();
-        // }, 500);
+    const getTableData = (kpis) => {
+        return kpis?.sort(sort_by_id('thresholdId')).map((kpi, index) => {
+            return (
+                <>
+                    <TableRow key={index}>
+                        <TableCell style={getCellStyle(kpi)}>{kpi?.kpi}</TableCell>
+                        <TableCell style={getCellStyle(kpi)}>{kpi?.kpi !== 'TAS_ACTIVE_REGISTRATIONS' && kpi?.rate && kpi?.rate != 'undefined' && kpi?.rate != 'null' ? kpi?.rate >= 100 ? 100 : kpi?.rate : ''}</TableCell>
+                        <TableCell style={styles.tableCell}>{kpi?.kpi !== 'TAS_ACTIVE_REGISTRATIONS' &&  kpi?.avg && kpi?.avg != 'undefined' && kpi?.avg != 'null' ? kpi?.avg >= 100 ? 100 : kpi?.avg : ''}</TableCell>
+                        <TableCell style={styles.tableCell}>{kpi?.att}</TableCell>
+                    </TableRow>
+                </>
+            )
+        })
+    }
 
-        return () => clearTimeout(interval);
-    }, []);
-
-    useEffect(() => {
-        const refreshTimeout = setTimeout(() => {
-            window.location.reload();
-        }, 1 * 60 * 60 * 1000);
-
-        return () => clearTimeout(refreshTimeout);
-    }, []);
+    function noteInfo(note) {
+        let formattedName = note?.updated_by;
+        const time = moment(note?.updated_at).tz(ptTimeZone).format('MM/DD/YYYY HH:mm');
+        if (!formattedName) {
+          formattedName = 'Default, User';
+        } else if (formattedName === 'Default User') {
+          formattedName = 'Default, User';
+        }
+        let [firstName, lastName] = formattedName.split(', ');
+        let firstLetterFirstName = firstName.charAt(0).toUpperCase();
+        let firstLetterLastName = lastName.charAt(0).toUpperCase();
+      
+        return (
+          <div style={{display: 'flex', alignItems: 'center'}}>
+            <div className="name-icons">
+                <div title={formattedName} className="icon-small">{firstLetterFirstName}{firstLetterLastName}</div>
+            </div>
+            <div style={{fontSize: '10px'}}>{time}</div>
+          </div>
+        );
+      }
 
     return (
-        <header style={{
-            backgroundColor: '#d6006e',
-            height: '96px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            color: '#fff',
-            padding: '0 24px',
-        }}>
-            <Typography style={{ fontSize: '28px', display: 'flex', alignItems: 'center' }} variant="h1">
-                <img width={48} height={48} style={{ marginRight: '8px' }} src="/tlogo.png" alt="logo" />
-                NATIONAL Messaging VIEW
-            </Typography>
-
-            <Box style={{ display: 'flex', alignItems: 'center' }}>
-                <LanguageIcon style={{ fontSize: '20px', color: '#fff', marginRight: '8px' }} />
-                <Typography style={{ fontSize: '16px', color: '#fff' }}> Pacific Time </Typography>
+        <>
+            <Table style={styles.table}>
+                <TableHead style={styles.tableHead}>
+                    <TableRow>
+                        <TableCell style={styles.tableCell}>Node Name</TableCell>
+                        <TableCell style={styles.tableCell}>Sync Time</TableCell>
+                        <TableCell style={styles.tableCell}>Nest Status</TableCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody>
+                    <TableRow>
+                        <TableCell style={styles.tableCell}>{node?.host_name}</TableCell>
+                        <TableCell style={styles.tableCell}>{showTime(Object.values(node?.stats)[0]?.time_value)}</TableCell>
+                        <TableCell style={styles.tableCell}>{node?.nestStatus || 'NA'}</TableCell>
+                    </TableRow>
+                    {
+                        node?.notes?.length > 0 && (
+                            <TableRow>
+                                <TableCell style={styles.tableCellColored}>Latest Note</TableCell>
+                                <TableCell style={styles.tableCell}>{node?.notes?.length > 0 ? node?.notes?.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0]?.notes : ''}</TableCell>
+                                <TableCell style={styles.tableCell}>{node?.notes?.length > 0 ? noteInfo(node?.notes?.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0]) : ''}</TableCell>
+                                {/* <TableCell style={styles.tableCell}>{node?.notes?.length > 0 ? node?.notes[0]?.updated_by : ''}</TableCell> */}
+                            </TableRow>
+                        )
+                    }
+                </TableBody>
+            </Table>
+            <Box sx={{
+                display: 'flex',
+                flexDirection: 'row',
+                // flexWrap: 'wrap',
+                // alignItems: 'center',
+                // justifyContent: 'center',
+            }}>
+                {
+                    data && (
+                        Object.values(data).map((kpis, index) => {
+                            return (
+                                <Table key={index} style={styles.table}>
+                                    <TableHead style={styles.tableHead}>
+                                        <TableRow>
+                                            {tableHeaders.map((header, index) => (
+                                                <TableCell key={index} style={styles.tableCell}>{header}</TableCell>
+                                            ))}
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {getTableData(kpis)}
+                                    </TableBody>
+                                </Table>
+                            )
+                        })
+                    )
+                }
             </Box>
-
-            {/* <AuthenticatedTemplate>
-                <RoleLayout roles={["user_access", "dev_access"]}>
-                    <AllowedContent> */}
-                        <ButtonGroup>
-                            <Button onClick={() => { context.setNotifications(!context?.notifications) }} style={{ color: '#fff', borderColor: '#fff' }}> {!context?.notifications ? <IconButton>
-                                <Badge badgeContent={context?.alerts?.length} color="primary">
-                                    <NotificationsIcon style={{ fontSize: '20px', color: '#fff' }} />
-                                </Badge>
-                            </IconButton> : <ArrowBackIcon style={{ fontSize: '20px' }} />} </Button>
-                            <Button onClick={() => { window.location.reload(); }} style={{ color: '#fff', borderColor: '#fff' }}>RELOAD</Button>
-                            <Button onClick={() => { localStorage.setItem('oor', !context?.oor); context?.toggleOOR(!context?.oor) }} style={{ color: '#fff', borderColor: '#fff', background: !context?.oor ? 'rgb(160, 0, 80)' : 'transparent' }}> OOR </Button>
-                            <Button onClick={() => { setOpenNotes(true); }} style={{ color: '#fff', borderColor: '#fff' }}> HELP </Button>
-                            {/* <Button onClick={() => window.open(process.env.REACT_APP_WCO_URL, "_blank")}style={{ color: '#fff', borderColor: '#fff' }}> WCO View </Button> */}
-                            <Button onClick={handleLogout} style={{ color: '#fff', borderColor: '#fff', }}> LOGOUT <LogoutIcon style={{ fontSize: '16px', marginLeft: '8px' }} /></Button>
-                        </ButtonGroup>
-                    {/* </AllowedContent>
-                </RoleLayout>
-            </AuthenticatedTemplate> */}
-            <Modal
-                open={openNotes}
-                onClose={() => { setOpenNotes(false); }}
-                aria-labelledby="notes-modal-title"
-                aria-describedby="notes-modal-description"
-            >
-                <Box sx={modalNotes}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Typography sx={{ color: '#d6006e' }} id="notes-modal-title" variant="h6" component="h2">
-                            Help
-                        </Typography>
-                        <IconButton sx={{ color: '#d6006e' }} onClick={() => { setOpenNotes(false); }}><CloseIcon /></IconButton>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', marginTop: '20px' }}>
-                        <Typography id="notes-modal-title" variant="body">
-                            Email To:
-                        </Typography>
-                        <Link sx={{ marginLeft: '8px' }} href="mailto:wco_app_support@t-mobile.com" target="_blank" rel="noopener noreferrer">
-                            WCO APP SUPPORT
-                        </Link>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', marginTop: '20px' }}>
-                        <Typography id="notes-modal-title" variant="body">
-                            Download -
-                        </Typography>
-                        <Link sx={{ marginLeft: '8px' }} href={'Messaging Heatmap - User Guide.pdf'} download target="_blank">
-                            Messaging User Guide
-                        </Link>
-                    </div>
-                </Box>
-            </Modal>
-        </header>
+        </>
     );
-};
+});
 
-export default Header;
+export default KPIModalContent;
