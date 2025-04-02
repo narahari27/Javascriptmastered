@@ -9,7 +9,36 @@ const REGIONS_MAPPING = {
   // Add more as needed
 };
 
-export const NodeContext = createContext(null);
+// Create context with default values instead of null
+export const NodeContext = createContext({
+  nodes: {},
+  setNodes: () => {},
+  basefilters: { nodetype: ['All'], regions: ['All'], pools: ['All'] },
+  filters: { nodetype: 'All', regions: 'All', pools: 'All' },
+  setFilters: () => {},
+  filteredNodes: {},
+  hasFilters: false,
+  resetFilters: () => {},
+  setSearch: () => {},
+  dataLoading: false,
+  syncNotes: () => {},
+  oor: true,
+  toggleOOR: () => {},
+  alerts: [],
+  allAlerts: [],
+  notifications: false,
+  setNotifications: () => {},
+  error: false,
+  setPriorityFilter: () => {},
+  setDegradedNodes: () => {},
+  priorityFilter: ['normal', 'oor', 'major', 'critical'],
+  degradedNodes: false,
+  setNotificationsFilter: () => {},
+  notificationsFilter: {priorities: ['critical'], timeRange: '1hr'},
+  setFilteredNotifications: () => {},
+  filteredNotifications: { allAlerts: [], alerts: [] },
+  refreshData: () => {}
+});
 
 // Mock data generator
 const generateMockData = () => {
@@ -128,9 +157,10 @@ const groupByRegions = (data) => {
 };
 
 export const NodeProvider = ({ children }) => {
+  // Initialize with empty objects instead of empty arrays where appropriate
   const [data, setData] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
-  const [oor, toggleOOR] = useState(localStorage.getItem('oor') ? localStorage.getItem('oor') === 'true' ? true : false : true);
+  const [oor, toggleOOR] = useState(localStorage.getItem('oor') === 'true' ? true : false);
   const [allAlerts, setAllAlerts] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [notifications, setNotifications] = useState(false);
@@ -138,14 +168,42 @@ export const NodeProvider = ({ children }) => {
   const [priorityFilter, setPriorityFilter] = useState(['normal', 'oor', 'major', 'critical']);
   const [notificationsFilter, setNotificationsFilter] = useState({priorities: ['critical'], timeRange: '1hr'});
 
-  // Load mock data on initial render
+  // Initialize with empty objects to prevent null issues
+  const [nodes, setNodes] = useState({});
+  const [basefilters, setBasefilters] = useState({
+    nodetype: ['All'],
+    regions: ['All'],
+    pools: ['All'],
+  });
+  const [filteredNodes, setFilteredNodes] = useState({});
+  const [hasFilters, setHasFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    nodetype: 'All',
+    regions: 'All',
+    pools: 'All',
+  });
+
+  // Load mock data immediately on initial render
   useEffect(() => {
+    loadMockData();
+  }, []);
+
+  // Function to load mock data - extract for reuse
+  const loadMockData = () => {
     setDataLoading(true);
     
-    // Simulate API delay
+    // Generate immediately to prevent null issues
+    const mockData = generateMockData();
+    
+    // Group by pool first to set initial state
+    const poolData = groupByPool(mockData);
+    setNodes(poolData);
+    
+    // Set the rest of the data with a short delay to simulate loading
     setTimeout(() => {
-      const mockData = generateMockData();
       setData(mockData);
+      setBasefilters(getFilters(mockData));
+      setFilteredNodes(groupByRegions(mockData));
       setDataLoading(false);
       
       // Generate some mock alerts
@@ -163,22 +221,8 @@ export const NodeProvider = ({ children }) => {
       
       setAlerts(mockAlerts);
       setAllAlerts(mockAlerts);
-    }, 1000);
-  }, []);
-
-  const [nodes, setNodes] = useState({});
-  const [basefilters, setBasefilters] = useState({
-    nodetype: ['All'],
-    regions: ['All'],
-    pools: ['All'],
-  });
-  const [filteredNodes, setFilteredNodes] = useState({});
-  const [hasFilters, setHasFilters] = useState(false);
-  const [filters, setFilters] = useState({
-    nodetype: 'All',
-    regions: 'All',
-    pools: 'All',
-  });
+    }, 500);
+  };
 
   // Update nodes, filters and filtered nodes when data changes
   useEffect(() => {
@@ -197,7 +241,7 @@ export const NodeProvider = ({ children }) => {
   }, [data, oor]);
 
   const processFilters = (filters) => {
-    if (Object.keys(filters).length) {
+    if (Object.keys(filters).length && data.length) {
       let filtered = data.filter((node) => {
         if (filters.nodetype && filters.nodetype !== 'All' && filters.nodetype !== node.nodetype) {
           return false
@@ -289,12 +333,7 @@ export const NodeProvider = ({ children }) => {
 
   // Function to refresh data (simulating API calls)
   const refreshData = () => {
-    setDataLoading(true);
-    setTimeout(() => {
-      const mockData = generateMockData();
-      setData(mockData);
-      setDataLoading(false);
-    }, 500);
+    loadMockData();
   };
 
   return (
