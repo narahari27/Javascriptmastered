@@ -1,10 +1,117 @@
 import React, { useState, useRef } from 'react';
-import { Card, CardContent, Typography, Menu, MenuItem, Popover, Box, IconButton } from '@mui/material';
+import { Card, CardContent, Typography, Menu, MenuItem, Popover, Box, Table, TableHead, TableBody, TableRow, TableCell } from '@mui/material';
 import HistoryIcon from '@mui/icons-material/History';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import NoteAddIcon from '@mui/icons-material/NoteAdd';
 import CommentIcon from '@mui/icons-material/Comment';
-import KPIModalContent from './KPIModalContent'; // Import the existing KPIModalContent
+
+// Custom KPI Table Component for Popover
+const KPITable = ({ node }) => {
+  // Define table styles to match screenshot
+  const styles = {
+    table: {
+      borderCollapse: 'collapse',
+      width: '100%',
+      border: '1px solid #ccc',
+      fontSize: '12px',
+    },
+    headerCell: {
+      backgroundColor: '#d6006e',
+      color: 'white',
+      padding: '8px',
+      textAlign: 'left',
+      fontWeight: 'bold',
+      border: '1px solid #ddd',
+    },
+    cell: {
+      padding: '6px 8px',
+      border: '1px solid #ddd',
+      color: 'black',
+    },
+    row: {
+      backgroundColor: 'white',
+    },
+    altRow: {
+      backgroundColor: '#f9f9f9',
+    },
+    nodeInfoTable: {
+      marginBottom: '10px',
+      width: '100%',
+    },
+    kpiCell: {
+      padding: '6px 8px',
+      border: '1px solid #ddd',
+      color: '#218838',
+      fontWeight: 'medium',
+    }
+  };
+
+  // Generate mock KPI data if none provided
+  const generateMockKPIs = () => {
+    return [
+      { kpi: 'DIAMRE_LIR_SUCCRATE', sr: 84.45, avg: null, attempts: 32638, avgAtt: null },
+      { kpi: 'DIAMRE_UAR_SUCCRATE', sr: 99.2, avg: null, attempts: 36124, avgAtt: null },
+      { kpi: 'DIAMRE_MAR_SUCCRATE', sr: 99.96, avg: null, attempts: 7785, avgAtt: null },
+      { kpi: 'DIAMRE_SAR_SUCCRATE', sr: 99.62, avg: null, attempts: 23651, avgAtt: null },
+      { kpi: 'DIAMRE_REQRCV_SUCCRATE', sr: 100, avg: null, attempts: 19, avgAtt: null },
+      { kpi: 'DIAMRE_REQSND_SUCCRATE', sr: 100, avg: null, attempts: 139101, avgAtt: null },
+      { kpi: 'GTRE_DNS_SRV_RATE', sr: 100, avg: null, attempts: 765, avgAtt: null },
+      { kpi: 'GTRE_DNS_NAPTR_RATE', sr: 100, avg: null, attempts: 558, avgAtt: null },
+      { kpi: 'GTRE_ENUM_SUCCRATE', sr: 78.75, avg: null, attempts: 68853, avgAtt: null },
+      { kpi: 'SIPRE_ROUTING_SUCCRATE', sr: 100, avg: null, attempts: 2545331, avgAtt: null },
+      { kpi: 'SIPRE_DB_ADAPTER_MGR_SUCCRATE', sr: 99.14, avg: null, attempts: 442641, avgAtt: null },
+      { kpi: 'SIPRE_DB_ADAPTER_CLIENT_SUCCRATE', sr: 99.14, avg: null, attempts: 442641, avgAtt: null },
+    ];
+  };
+
+  const kpis = generateMockKPIs();
+
+  return (
+    <Box sx={{ p: 1, maxWidth: 700, minWidth: 650 }}>
+      {/* Node Info Table */}
+      <Table style={styles.nodeInfoTable}>
+        <TableHead>
+          <TableRow>
+            <TableCell style={styles.headerCell}>Node Name</TableCell>
+            <TableCell style={styles.headerCell}>Sync Time</TableCell>
+            <TableCell style={styles.headerCell}>Nest Status</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          <TableRow style={styles.row}>
+            <TableCell style={styles.cell}>{node?.host_name || 'Unknown'}</TableCell>
+            <TableCell style={styles.cell}>{new Date().toLocaleString().replace(',', '')}</TableCell>
+            <TableCell style={styles.cell}>InService</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+
+      {/* KPI Table */}
+      <Table style={styles.table}>
+        <TableHead>
+          <TableRow>
+            <TableCell style={styles.headerCell}>KPI</TableCell>
+            <TableCell style={styles.headerCell}>SR%</TableCell>
+            <TableCell style={styles.headerCell}>Avg%</TableCell>
+            <TableCell style={styles.headerCell}>Attempts</TableCell>
+            <TableCell style={styles.headerCell}>Avg Att</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {kpis.map((kpi, index) => (
+            <TableRow key={index} style={index % 2 === 0 ? styles.row : styles.altRow}>
+              <TableCell style={{...styles.cell, color: '#218838'}}>{kpi.kpi}</TableCell>
+              <TableCell style={styles.cell}>{kpi.sr}</TableCell>
+              <TableCell style={styles.cell}>{kpi.avg || ''}</TableCell>
+              <TableCell style={styles.cell}>{kpi.attempts.toLocaleString()}</TableCell>
+              <TableCell style={styles.cell}>{kpi.avgAtt || ''}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+};
 
 const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }) => {
   const [contextMenu, setContextMenu] = useState(null);
@@ -88,26 +195,6 @@ const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }
     }
   };
 
-  // Create dummy data structure for stats that KPIModalContent expects
-  const groupedStats = (stats) => {
-    if (!stats) {
-      return undefined;
-    }
-
-    const panels = Object.values(stats)?.reduce((acc, curr) => {
-      if (!acc[curr.panel]) {
-        acc[curr.panel] = [];
-        acc[curr.panel].push(curr);
-      } else {
-        acc[curr.panel].push(curr);
-      }
-
-      return acc;
-    }, {});
-
-    return panels;
-  };
-
   return (
     <>
       <Card 
@@ -167,19 +254,8 @@ const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }
             boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
             borderRadius: '8px',
             border: '1px solid #e0e0e0',
-            maxWidth: '600px',
+            maxWidth: '800px',
             overflow: 'hidden',
-            animation: 'fadeIn 0.2s ease-in-out',
-            '@keyframes fadeIn': {
-              '0%': {
-                opacity: 0,
-                transform: 'translateY(10px)'
-              },
-              '100%': {
-                opacity: 1,
-                transform: 'translateY(0)'
-              },
-            },
           }
         }}
       >
@@ -191,8 +267,8 @@ const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }
             backgroundColor: '#ffffff',
           }}
         >
-          {/* Use the existing KPIModalContent component */}
-          <KPIModalContent node={safeNode} data={groupedStats(safeNode.stats)} />
+          {/* Use our custom KPI table component */}
+          <KPITable node={safeNode} />
         </Box>
       </Popover>
 
@@ -233,98 +309,3 @@ const Node = ({ node, onClick, style, bgcolor, color, enableContextMenu = true }
 };
 
 export default Node;
-
-// In KPIModalContent.jsx
-// Adjust the styles object to make it fit better in a popover
-
-const styles = {
-    table: {
-        borderCollapse: 'collapse',
-        border: '1px solid #e0e0e0',
-        minWidth: 350,
-        maxWidth: '100%',
-    },
-    tableHead: {
-        backgroundColor: '#d6006e',
-        color: '#fff'
-    },
-    tableCell: {
-        border: '1px solid #e0e0e0',
-        padding: '4px 8px', // Slightly smaller padding for popover
-        color: 'inherit',
-        fontSize: '12px',
-    },
-    tableCellColored: {
-        border: '1px solid #e0e0e0',
-        padding: '4px 8px',
-        backgroundColor: '#d6006e',
-        color: 'white',
-        fontSize: '12px',
-    },
-};
-
-// Make the component more compact for popover display
-const KPIModalContent = React.memo(({ node, data }) => {
-    // Rest of your component code...
-    
-    return (
-        <>
-            <Table style={styles.table}>
-                <TableHead style={styles.tableHead}>
-                    <TableRow>
-                        <TableCell style={styles.tableCell}>Node Name</TableCell>
-                        <TableCell style={styles.tableCell}>Sync Time</TableCell>
-                        <TableCell style={styles.tableCell}>Status</TableCell>
-                    </TableRow>
-                </TableHead>
-                <TableBody>
-                    <TableRow>
-                        <TableCell style={styles.tableCell}>{node?.host_name}</TableCell>
-                        <TableCell style={styles.tableCell}>{showTime(Object.values(node?.stats || {})[0]?.time_value)}</TableCell>
-                        <TableCell style={styles.tableCell}>{node?.nestStatus || 'NA'}</TableCell>
-                    </TableRow>
-                    {
-                        node?.notes?.length > 0 && (
-                            <TableRow>
-                                <TableCell style={styles.tableCellColored}>Latest Note</TableCell>
-                                <TableCell style={styles.tableCell}>{node?.notes[0]?.notes || ''}</TableCell>
-                                <TableCell style={styles.tableCell}>{node?.notes[0] ? noteInfo(node?.notes[0]) : ''}</TableCell>
-                            </TableRow>
-                        )
-                    }
-                </TableBody>
-            </Table>
-            <Box sx={{
-                display: 'flex',
-                flexDirection: 'row',
-                flexWrap: 'wrap',
-                justifyContent: 'flex-start',
-                gap: '8px',
-                p: 1
-            }}>
-                {
-                    data && Object.keys(data).length > 0 ? (
-                        Object.values(data).map((kpis, index) => (
-                            <Table key={index} style={styles.table}>
-                                <TableHead style={styles.tableHead}>
-                                    <TableRow>
-                                        {tableHeaders.map((header, index) => (
-                                            <TableCell key={index} style={styles.tableCell}>{header}</TableCell>
-                                        ))}
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {getTableData(kpis)}
-                                </TableBody>
-                            </Table>
-                        ))
-                    ) : (
-                        <Box sx={{ p: 2, width: '100%', textAlign: 'center' }}>
-                            <Typography variant="body2">No KPI data available</Typography>
-                        </Box>
-                    )
-                }
-            </Box>
-        </>
-    );
-});
