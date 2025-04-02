@@ -1,49 +1,233 @@
-import React, { Fragment } from 'react';
-import Node from './Node';
-import { CardContent, Card, Grid, Box, Typography } from '@mui/material';
-import sort_by from '../utils';
+import React, { useContext, useEffect, useState } from "react";
+import { NodeContext } from "../NodeContext";
+import { Table, TableBody, TableCell, TableHead, TableRow, Paper, Typography, Grid, Box, Checkbox, Radio } from '@mui/material';
 
-const REGIONS = {
-    'WEST': ['W1', 'W2', 'W3', 'HI'],
-    'CENTRAL': ['C1', 'C2', 'C3'],
-    'SOUTH': ['SE', 'SE1', 'SE2', 'SE3', 'SW', 'SW1', 'SW2', 'SW3', 'PR'],
-    'NORTH': ['NE', 'NE1', 'NE2', 'NE3', 'G'],
-}
-
-const NodeGroup = ({ nodes, group, keyProp }) => {
-    const groupBy = 'region';
-    return (
-        <Fragment key={keyProp}>
-            {
-                Object.keys(nodes).map((region, index) => (
-                    <Fragment key={index}>
-                        {
-                            nodes[region]?.sort(sort_by('host_name', false, (a) => a.toUpperCase()))?.length > 0 && (
-                                <Grid container key={index} style={{ padding: 0, margin: 0, border: '1px solid black', position: 'relative', flexGrow: 1 }}>
-                                    <Box width={'100%'} padding={2} textAlign="center">
-                                        <Typography style={{ fontWeight: 'bold', position: 'relative', border: '0 !important', minHeight: 'auto !important', backgroundColor: 'transparent !important', boxShadow: 'none', fontWeight: 'bold', fontSize: '14px' }} variant="body2">{'Pool:' + region?.toUpperCase()}</Typography>
-                                    </Box>
-                                    {
-                                        nodes[region]?.sort(sort_by)?.map(node => (
-                                            <Node groupBy={groupBy} style={{
-                                                width: 'calc(12.5% - 2px)',
-                                                maxHeight: 35,
-                                                border: '1px solid black',
-                                                borderRadius: 0,
-                                                margin: '1px',
-                                                padding: '1px'
-                                            }} key={node.host_name} node={node} />
-                                        ))
-                                    }
-                                </Grid>
-                            )
-                        }
-                    </Fragment>
-
-                ))
-            }
-        </Fragment>
-    );
+const styles = {
+    table: {
+        borderCollapse: 'collapse',
+        border: '1px solid #e0e0e0',
+        minWidth: 400,
+    },
+    tableHead: {
+        backgroundColor: '#d6006e',
+        color: '#fff'
+    },
+    tableCell: {
+        border: '1px solid #e0e0e0',
+        padding: '2px',
+        color: 'inherit',
+        fontSize: '12px',
+    },
 };
 
-export default NodeGroup;
+const Notifications = () => {
+    const { allAlerts, alerts, setNotificationsFilter, notificationsFilter, filteredNotifications } = useContext(NodeContext);
+
+    const getColorPriority = (priority) => {
+        switch (priority) {
+            case 'critical':
+                return '#ff0040';
+            case 'major':
+                return '#f2630a';
+            case 'minor':
+                return '#ffbf00';
+            case 'oor':
+                return '#0a58ca';
+            case 'normal':
+                return '#198754';
+
+            default:
+                return '#000';
+        }
+    }
+
+    const getCellStyle = (data) => {
+        return {
+            border: '1px solid #e0e0e0',
+            padding: '2px',
+            color: getColorPriority(data),
+            fontSize: '12px',
+        };
+    };
+
+    const [selectedFilters, setSelectedFilters] = useState(notificationsFilter);
+
+    useEffect(() => {
+        // Check if selectedFilters have changed
+        if (JSON.stringify(selectedFilters) !== JSON.stringify(notificationsFilter)) {
+            setNotificationsFilter(selectedFilters);
+        }
+    }, [selectedFilters, notificationsFilter, setNotificationsFilter])
+
+    const handleFilterToggle = (value, inputType) => {
+        if(inputType === "priorities"){
+            // Check if the priority is already selected
+            const index = selectedFilters.priorities.indexOf(value);
+            if (index !== -1) {
+                // If selected, remove it
+                const updatedPriorities = [...selectedFilters.priorities];
+                updatedPriorities.splice(index, 1);
+                setSelectedFilters({ ...selectedFilters, priorities: updatedPriorities });
+            } else {
+                // If not selected, add it
+                setSelectedFilters({ ...selectedFilters, priorities: [...selectedFilters.priorities, value] });
+            }
+        }else if(inputType === "timeRange"){
+            let timeRange = null;
+            if(value.target.checked){
+                timeRange = "1hr"
+            }
+            setSelectedFilters({
+                ...selectedFilters,
+                timeRange: timeRange
+            });
+        }
+    };
+
+    return (
+        <Paper sx={{ p: 3 }}>
+            <Typography variant="h2" sx={{ py: 2 }}>Notifications</Typography>
+
+            <Grid container gap={2} sx={{ marginBottom: '24px' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Checkbox
+                        checked={selectedFilters.priorities.includes('critical')}
+                        onChange={(e) => handleFilterToggle('critical', 'priorities')}
+                        sx={{
+                            '& .MuiSvgIcon-root': {
+                                color: '#ff0040',
+                            },
+                            '&.Mui-checked .MuiIconButton-root': {
+                                backgroundColor: '#ff0040',
+                            },
+                        }}
+                    />
+                    <Typography sx={{ marginLeft: '4px' }} variant="body">
+                        Critical
+                    </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Checkbox
+                        checked={selectedFilters.priorities.includes('major')}
+                        onChange={(e) => handleFilterToggle('major', 'priorities')}
+                        sx={{
+                            color: '#f2630a',
+                            '&.Mui-checked': {
+                                color: '#f2630a',
+                            }
+                        }}
+                    />
+                    <Typography sx={{ marginLeft: '4px' }} variant="body">
+                        Major
+                    </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Checkbox
+                        checked={selectedFilters.priorities.includes('oor')}
+                        onChange={(e) => handleFilterToggle('oor', 'priorities')}
+                        sx={{
+                            color: '#0a58ca',
+                            '&.Mui-checked': {
+                                color: '#0a58ca',
+                            }
+                        }}
+                    />
+                    <Typography sx={{ marginLeft: '4px' }} variant="body">
+                        OOR
+                    </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Checkbox
+                        checked={selectedFilters.priorities.includes('normal')}
+                        onChange={(e) => handleFilterToggle('normal', 'priorities')}
+                        sx={{
+                            color: '#198754',
+                            '&.Mui-checked': {
+                                color: '#198754',
+                            }
+                        }}
+                    />
+                    <Typography sx={{ marginLeft: '4px' }} variant="body">
+                        Normal
+                    </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Checkbox
+                        checked={selectedFilters.timeRange != null}
+                        onChange={(e) => handleFilterToggle(e, 'timeRange')}
+                        sx={{
+                            color: ' #7A687F',
+                            '&.Mui-checked': {
+                                color: '#7A687F',
+                            }
+                        }}
+                    />
+                    <Typography sx={{ marginLeft: '4px' }} variant="body">
+                        Last Hour from Login
+                    </Typography>
+                </Box>   
+            </Grid>
+            <Typography variant="h4" sx={{ py: 2 }}>New Alerts</Typography>
+            <Table style={styles.table}>
+                <TableHead style={styles.tableHead}>
+                    <TableRow>
+                        <TableCell style={styles.tableCell}>Time</TableCell>
+                        <TableCell style={styles.tableCell}>Node</TableCell>
+                        <TableCell style={styles.tableCell}>Previous State</TableCell>
+                        <TableCell style={styles.tableCell}>Current State</TableCell>
+                        <TableCell style={styles.tableCell}>KPI Name</TableCell>
+                        <TableCell style={styles.tableCell}>Status</TableCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody>
+                    {(notificationsFilter.priorities.length ? filteredNotifications.alerts : alerts)
+                    .sort(function (a, b) {
+                        return new Date(b.timestamp) - new Date(a.timestamp);
+                    }).map((alert, index) => {
+                        return (
+                            <TableRow key={index}>
+                                <TableCell style={styles.tableCell}>{new Date(alert.timestamp).toLocaleString()}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.host_name}</TableCell>
+                                <TableCell style={getCellStyle(alert.prevPriority)}>{alert.prevPriority}</TableCell>
+                                <TableCell style={getCellStyle(alert.priority)}>{alert.priority}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.kpi}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.isNew ? 'New' : 'Updated'}</TableCell>
+                            </TableRow>
+                        )
+                    })}
+                </TableBody>
+            </Table>
+            <Typography variant="h4" sx={{ py: 2 }}>All Alerts</Typography>
+            <Table style={styles.table}>
+                <TableHead style={styles.tableHead}>
+                    <TableRow>
+                        <TableCell style={styles.tableCell}>Time</TableCell>
+                        <TableCell style={styles.tableCell}>Node</TableCell>
+                        <TableCell style={styles.tableCell}>Previous State</TableCell>
+                        <TableCell style={styles.tableCell}>Current State</TableCell>
+                        <TableCell style={styles.tableCell}>KPI Name</TableCell>
+                        <TableCell style={styles.tableCell}>Status</TableCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody>
+                    {(notificationsFilter.priorities.length ? filteredNotifications.allAlerts : allAlerts).sort(function (a, b) {
+                        return new Date(b.timestamp) - new Date(a.timestamp);
+                    }).map((alert, index) => {
+                        return (
+                            <TableRow key={index}>
+                                <TableCell style={styles.tableCell}>{new Date(alert.timestamp).toLocaleString()}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.host_name}</TableCell>
+                                <TableCell style={getCellStyle(alert.prevPriority)}>{alert.prevPriority}</TableCell>
+                                <TableCell style={getCellStyle(alert.priority)}>{alert.priority}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.kpi ?? ''}</TableCell>
+                                <TableCell style={styles.tableCell}>{alert.isNew ? 'New' : 'Updated'}</TableCell>
+                            </TableRow>
+                        )
+                    })}
+                </TableBody>
+            </Table>
+        </Paper>
+    )
+}
+
+export default Notifications;
