@@ -1,28 +1,78 @@
 import React, { createContext, useState, useEffect } from 'react';
-import { useIndexedDB } from "react-indexed-db-hook";
-import REGIONS_MAPPING from './constants/REGION_MAPPING.json';
-import axiosClient from './api/client';
+
+// Sample region mapping to match your original
+const REGIONS_MAPPING = {
+  'WEST': 'WEST',
+  'EAST': 'EAST',
+  'CENTRAL': 'CENTRAL',
+  'SOUTH': 'SOUTH',
+  // Add more as needed
+};
 
 export const NodeContext = createContext(null);
 
-const groupByRegions = (data) => {
-  return data.reduce((acc, curr) => {
-    const largerRegion = REGIONS_MAPPING[curr.pool];
-
-    if (!acc[largerRegion]) {
-      acc[largerRegion] = {};
+// Mock data generator
+const generateMockData = () => {
+  const techTypes = ['tas', 'cscf', 'bgcf', 'catf', 'vss', 'sbi', 'csbg'];
+  const priorities = ['normal', 'oor', 'major', 'critical'];
+  const pools = ['WEST', 'EAST', 'CENTRAL', 'SOUTH'];
+  
+  let nodes = [];
+  
+  pools.forEach(pool => {
+    // Generate 5-15 nodes per pool
+    const nodeCount = Math.floor(Math.random() * 10) + 5;
+    
+    for (let i = 0; i < nodeCount; i++) {
+      const techType = techTypes[Math.floor(Math.random() * techTypes.length)];
+      const priority = priorities[Math.floor(Math.random() * priorities.length)];
+      
+      nodes.push({
+        host_name: `${techType.toUpperCase()}-${pool}-${i + 1}`,
+        priority: priority,
+        nodetype: techType,
+        pool: pool,
+        timezone: pool,
+        nestStatus: 'inservice',
+        notes: Math.random() > 0.7 ? [{
+          notes: `Test note for ${techType.toUpperCase()}-${pool}-${i + 1}`,
+          updated_by: 'Test, User',
+          updated_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        }] : [],
+        stats: Math.random() > 0.5 ? generateMockStats(techType) : null
+      });
     }
+  });
+  
+  return nodes;
+};
 
-    if (!acc[largerRegion][curr.pool]) {
-      acc[largerRegion][curr.pool] = [];
-    }
-
-    acc[largerRegion][curr.pool].push(curr);
-
-    return acc;
-  }, {});
-}
-
+// Generate mock stats for a node
+const generateMockStats = (techType) => {
+  const kpis = ['CALL_ATTEMPT', 'REGISTER_SUCCESS', 'TAS_ACTIVE_REGISTRATIONS', 'INVITE_SUCCESS'];
+  const panels = [1, 2];
+  
+  let stats = {};
+  
+  for (let i = 0; i < Math.floor(Math.random() * 3) + 1; i++) {
+    const kpi = kpis[Math.floor(Math.random() * kpis.length)];
+    const panel = panels[Math.floor(Math.random() * panels.length)];
+    const id = `stats-${kpi}-${i}`;
+    
+    stats[id] = {
+      kpi: kpi,
+      rate: Math.floor(Math.random() * 100),
+      avg: Math.floor(Math.random() * 100),
+      att: Math.floor(Math.random() * 1000),
+      panel: panel,
+      priority: Math.random() > 0.7 ? 'critical' : Math.random() > 0.5 ? 'major' : 'normal',
+      time_value: new Date().toISOString()
+    };
+  }
+  
+  return stats;
+};
 
 const groupByPool = (data) => {
   return data.reduce((acc, curr) => {
@@ -35,7 +85,7 @@ const groupByPool = (data) => {
 
     return acc
   }, {})
-}
+};
 
 const getFilters = (data) => {
   return data.reduce((acc, curr) => {
@@ -57,251 +107,72 @@ const getFilters = (data) => {
     regions: ['All'],
     pools: ['All'],
   })
-}
+};
+
+const groupByRegions = (data) => {
+  return data.reduce((acc, curr) => {
+    const largerRegion = REGIONS_MAPPING[curr.pool];
+
+    if (!acc[largerRegion]) {
+      acc[largerRegion] = {};
+    }
+
+    if (!acc[largerRegion][curr.pool]) {
+      acc[largerRegion][curr.pool] = [];
+    }
+
+    acc[largerRegion][curr.pool].push(curr);
+
+    return acc;
+  }, {});
+};
 
 export const NodeProvider = ({ children }) => {
-  const { add, getAll } = useIndexedDB("alerts");
-  const tech = ['tas', 'cscf', 'bgcf', 'catf', 'vss', 'csbg', 'sbi'];
   const [data, setData] = useState([]);
-  const [stats, setStats] = useState([]);
-  const [processedStats, setProcessedStats] = useState({});
-  const [nodeData, setNodeData] = useState([]);
-  const [notes, setNotes] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
-  const [nest, setNest] = useState([]);
-  const [avg, setAvg] = useState([]);
   const [oor, toggleOOR] = useState(localStorage.getItem('oor') ? localStorage.getItem('oor') === 'true' ? true : false : true);
   const [allAlerts, setAllAlerts] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [notifications, setNotifications] = useState(false);
-  const [fetchAlerts, setFetchAlerts] = useState(false);
   const [error, setError] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState(['normal', 'oor', 'major', 'critical']);
   const [notificationsFilter, setNotificationsFilter] = useState({priorities: ['critical'], timeRange: '1hr'});
 
-  const fetchAllNodes = async () => {
+  // Load mock data on initial render
+  useEffect(() => {
     setDataLoading(true);
-    try {
-      let data = await axiosClient.get(`/api/getAllConfig?_=${new Date().getTime()}`, {
-        headers: {
-          'Cache-Control': 'no-cache'
-        }
-      });
-      setError(false);
-      setDataLoading(false);
-      const config = data?.data?.config || {};
-      const nodes = Object.values(config);
-      setNodeData(nodes);
-    } catch(err) {
-      setError(false);
-      setDataLoading(false);
-      setNodeData([]);
-    }
-  }
-
-  const fetchNest = async () => {
-    try {
-      const { data } = await axiosClient.get(`/api/getNestInfo/?_=${new Date().getTime()}`, {
-        headers: {
-          'Cache-Control': 'no-cache'
-        }
-      });
-      setError(false);
-      setNest(data?.data);
-    } catch(err) {
-      setError(false);
-      setNest([]);
-    }
-  }
-
-  const fetchNotes = async () => {
-    const { data } = await axiosClient.get(`/api/getNotes?_=${new Date().getTime()}`, {
-      headers: {
-        'Cache-Control': 'no-cache'
-      }
-    });
-    setNotes(data?.data);
-  }
-
-  const fetchStats = async () => {
-    const promiseArray = tech.map(t => axiosClient.get(`/api/getNodeStats/?nodeType=${t}&_=${new Date().getTime()}`, {
-      headers: {
-        'Cache-Control': 'no-cache'
-      }
-    }));
-
-    Promise.all(promiseArray).then(res  => {
-      const result = res.reduce((acc, curr, index) => {
-        acc = [...acc, ...curr?.data?.data]
-        return acc
-      }, []);
-      setError(false);
-      setStats(result);
-    }).catch(err => {
-      setError(false);
-      setStats([]);
-    });
-  }
-
-  const fetchAverage = async () => {
-    const promiseArray = tech.map(t => axiosClient.get(`/api/getNodeTrends/?techType=${t}&_=${new Date().getTime()}`, {
-      headers: {
-        'Cache-Control': 'no-cache'
-      }
-    }));
-
-    Promise.all(promiseArray).then(res  => {
-      const result = res.reduce((acc, curr, index) => {
-        acc = [...acc, ...curr?.data?.data]
-        return acc
-      }, []);
-      setError(false);
-      setAvg(result);
-    }).catch(err => {
-      setError(false);
-      setAvg([]);
-    });
-  }
-
-  const postAlerts = async (data) => {
     
-    let alertsData = await data.map((_) => ({
-        'alert_time' : _.timestamp,
-        'node' : _.host_name,
-        'current_state' : _.priority,
-        'previous_state' : _.prevPriority,
-        'kpi_name' : _.kpi,
-        'status' : _.isNew ? 'New' : 'Updated'
-    }));
-  
-    try {
-      let response = await axiosClient.post(`/api/saveAlerts`, alertsData, {
-        headers: {
-          'Cache-Control': 'no-cache'
-        }
-      });
-    } catch(err) {
-      console.log("error in storing alerts", err);
-    }
-  }
+    // Simulate API delay
+    setTimeout(() => {
+      const mockData = generateMockData();
+      setData(mockData);
+      setDataLoading(false);
+      
+      // Generate some mock alerts
+      const mockAlerts = mockData
+        .filter(node => node.priority === 'critical' || node.priority === 'major')
+        .slice(0, 5)
+        .map(node => ({
+          host_name: node.host_name,
+          priority: node.priority,
+          prevPriority: 'normal',
+          isNew: Math.random() > 0.5,
+          timestamp: new Date().toISOString(),
+          kpi: 'CALL_ATTEMPT'
+        }));
+      
+      setAlerts(mockAlerts);
+      setAllAlerts(mockAlerts);
+    }, 1000);
+  }, []);
 
-  useEffect(() => {
-    if (stats && stats.length) {
-      processStats();
-    }
-  }, [stats, avg]);
-
-  useEffect(() => {
-    if (data && data.length && data[0].stats && fetchAlerts) {
-      processAlerts();
-    }
-  }, [data]);
-
-  useEffect(() => {
-    fetchAllNodes();
-    fetchNest();
-    fetchNotes();
-    fetchAverage();
-    fetchStats();
-
-    getAll().then(res => {
-      if (res && res.length) {
-        setAllAlerts(res);
-      }
-    })
-
-    const interval = setInterval(() => {
-      fetchAllNodes();
-      fetchNest()
-      fetchNotes();
-      fetchAverage();
-      fetchStats();
-    }, 300000);
-
-    // return () => clearInterval(interval);
-  }, [])
-
-  useEffect(() => {
-    const nodeWorker = new Worker('/workers/processNodes.js');
-
-    if (nodeData && nodeData.length > 0) {
-      if (processedStats && Object.keys(processedStats).length) {
-        nodeWorker.postMessage({
-          nodes: nodeData,
-          notes: notes,
-          stats: processedStats,
-          nest: nest
-        });
-      } else {
-        nodeWorker.postMessage({
-          nodes: nodeData,
-          notes: notes,
-          nest: nest
-        });
-      }
-
-      nodeWorker.onmessage = function (e) {
-        setData(e.data);
-        nodeWorker.terminate();
-      };
-    }
-
-    return () => nodeWorker.terminate();
-  }, [nodeData, processedStats, notes, nest]);
-
-  const processStats = () => {
-    const statsWorker = new Worker('/workers/processStats.js');
-    statsWorker.postMessage({
-      stats: [
-        ...stats
-      ],
-      avg
-    });
-
-    statsWorker.onmessage = function (e) {
-      setFetchAlerts(true);
-      setProcessedStats(e.data);
-      statsWorker.terminate();
-    };
-
-    statsWorker.onerror = function (event) {
-      setProcessedStats({});
-      statsWorker.terminate();
-    };
-  }
-
-  const processAlerts = () => {
-    const alertsWorker = new Worker('/workers/processAlerts.js');
-    let previousData = window.localStorage.getItem('alerts');
-    previousData = previousData ? JSON.parse(previousData) : {};
-    alertsWorker.postMessage({
-      nodes: data,
-      previousData: previousData
-    });
-
-    alertsWorker.onmessage = function (e) {
-      const { alerts, newData, previousData } = e.data;
-      window.localStorage.setItem('alerts', JSON.stringify({ ...previousData, ...newData }));
-      setAllAlerts([...allAlerts, ...alerts]);
-      setAlerts(alerts);
-      if(alerts.length){
-        postAlerts(alerts);
-      }
-      setFetchAlerts(false);
-      alerts?.forEach(_ => add(_));
-      alertsWorker.terminate();
-    };
-
-    alertsWorker.onerror = function (event) {
-      setFetchAlerts(false);
-      setAlerts([]);
-      alertsWorker.terminate();
-    };
-  }
-
-  const [nodes, setNodes] = useState(groupByPool(data));
-  const [basefilters, setBasefilters] = useState(getFilters(data));
-  const [filteredNodes, setFilteredNodes] = useState(data);
+  const [nodes, setNodes] = useState({});
+  const [basefilters, setBasefilters] = useState({
+    nodetype: ['All'],
+    regions: ['All'],
+    pools: ['All'],
+  });
+  const [filteredNodes, setFilteredNodes] = useState({});
   const [hasFilters, setHasFilters] = useState(false);
   const [filters, setFilters] = useState({
     nodetype: 'All',
@@ -309,6 +180,7 @@ export const NodeProvider = ({ children }) => {
     pools: 'All',
   });
 
+  // Update nodes, filters and filtered nodes when data changes
   useEffect(() => {
     if (data.length) {
       if (oor) {
@@ -322,7 +194,7 @@ export const NodeProvider = ({ children }) => {
         setFilteredNodes(groupByRegions(data));
       }
     }
-  }, [data]);
+  }, [data, oor]);
 
   const processFilters = (filters) => {
     if (Object.keys(filters).length) {
@@ -365,7 +237,7 @@ export const NodeProvider = ({ children }) => {
     if (data.length) {
       processFilters(filters);
     }
-  }, [filters, oor, priorityFilter]);
+  }, [filters, oor, priorityFilter, data]);
 
   const resetFilters = () => {
     setFilters({ nodetype: 'All', regions: 'All', pools: 'All' });
@@ -373,10 +245,10 @@ export const NodeProvider = ({ children }) => {
 
   const setSearch = (search) => {
     if (search) {
-      const notefiltered = data.filter(_ => _.host_name?.toLowerCase()?.includes(search?.toLowerCase()));
-      const poolfiltered = data.filter(_ => _.pool?.toLowerCase()?.includes(search?.toLowerCase()));
+      const nodeFiltered = data.filter(_ => _.host_name?.toLowerCase()?.includes(search?.toLowerCase()));
+      const poolFiltered = data.filter(_ => _.pool?.toLowerCase()?.includes(search?.toLowerCase()));
       const seen = {};
-      const filtered = [...notefiltered, ...poolfiltered].filter(item => !(item.host_name in seen) && (seen[item.host_name] = true));
+      const filtered = [...nodeFiltered, ...poolFiltered].filter(item => !(item.host_name in seen) && (seen[item.host_name] = true));
       setHasFilters(true);
       setFilteredNodes(groupByRegions(filtered));
       setNodes(groupByPool(filtered));
@@ -386,7 +258,13 @@ export const NodeProvider = ({ children }) => {
   }
 
   const syncNotes = () => {
-    fetchNotes();
+    // In real app this would fetch notes, here we'll just refresh mock data
+    setDataLoading(true);
+    setTimeout(() => {
+      const mockData = generateMockData();
+      setData(mockData);
+      setDataLoading(false);
+    }, 300);
   }
 
   const [degradedNodes, setDegradedNodes] = useState(false);
@@ -399,65 +277,59 @@ export const NodeProvider = ({ children }) => {
     }
   }, [degradedNodes]);
 
-  // Set filtered notifications data
+  // Process Notification filters (simplified)
   const [filteredNotifications, setFilteredNotifications] = useState({
     allAlerts: [],
     alerts: [],
   });
 
-  // Process Notificaiton filters
-  const processNotificationFilters = () => {
-    let filteredAllAlerts;
-    let filteredAlerts;
-    const currentTime = new Date(); // Current time
-
-    // Time range filter
-    if(notificationsFilter.timeRange && notificationsFilter.timeRange == "1hr"){
-      const oneHourAgo = new Date(currentTime.getTime() - 60 * 60 * 1000); // Time one hour ago
-
-      // Filter objects based on timestamp
-      filteredAlerts = alerts.filter(obj => {
-          const objTime = new Date(obj.timestamp); 
-          return objTime >= oneHourAgo && objTime <= currentTime; 
-      });
-
-      // Filter objects based on timestamp
-      filteredAllAlerts = allAlerts.filter(obj => {
-        const objTime = new Date(obj.timestamp); 
-        return objTime >= oneHourAgo && objTime <= currentTime;
-      });
-    }else if(notificationsFilter.timeRange && notificationsFilter.timeRange == "24hrs"){
-      const oneDayAgo = new Date(currentTime.getTime() - 24 * 60 * 60 * 1000); // Time 24 hours ago
-  
-      // Filter objects based on timestamp
-      filteredAlerts = alerts.filter(obj => {
-          const objTime = new Date(obj.timestamp); 
-          return objTime >= oneDayAgo && objTime <= currentTime;
-      });  
-
-      // Filter objects based on timestamp
-      filteredAllAlerts = allAlerts.filter(obj => {
-        const objTime = new Date(obj.timestamp);
-        return objTime >= oneDayAgo && objTime <= currentTime;
-      });
-    }else {
-      filteredAlerts = alerts;
-      filteredAllAlerts = allAlerts;
-    }
-
-    // Priorities filter
-    if(notificationsFilter.priorities.length){
-      filteredAllAlerts = filteredAllAlerts.filter((alert) => notificationsFilter.priorities.includes(alert.priority));
-      filteredAlerts = filteredAlerts.filter((newAlert) => notificationsFilter.priorities.includes(newAlert.priority));
-    }
-
-    setFilteredNotifications({allAlerts: filteredAllAlerts, alerts: filteredAlerts});
-  }
-
-  // Trigger when notifications filter changes
   useEffect(() => {
-    processNotificationFilters()
-  }, [notificationsFilter, alerts, allAlerts])
+    setFilteredNotifications({allAlerts: allAlerts, alerts: alerts});
+  }, [notificationsFilter, alerts, allAlerts]);
 
-  return <NodeContext.Provider value={{ nodes, setNodes, basefilters, filters, setFilters, filteredNodes, hasFilters, resetFilters, setSearch, dataLoading, syncNotes, oor, toggleOOR, alerts, allAlerts, notifications, setNotifications, error, setPriorityFilter, setDegradedNodes, priorityFilter, degradedNodes, setNotificationsFilter, notificationsFilter, setFilteredNotifications, filteredNotifications }}>{children}</NodeContext.Provider>
-}
+  // Function to refresh data (simulating API calls)
+  const refreshData = () => {
+    setDataLoading(true);
+    setTimeout(() => {
+      const mockData = generateMockData();
+      setData(mockData);
+      setDataLoading(false);
+    }, 500);
+  };
+
+  return (
+    <NodeContext.Provider 
+      value={{ 
+        nodes, 
+        setNodes, 
+        basefilters, 
+        filters, 
+        setFilters, 
+        filteredNodes, 
+        hasFilters, 
+        resetFilters, 
+        setSearch, 
+        dataLoading, 
+        syncNotes, 
+        oor, 
+        toggleOOR, 
+        alerts, 
+        allAlerts, 
+        notifications, 
+        setNotifications, 
+        error, 
+        setPriorityFilter, 
+        setDegradedNodes, 
+        priorityFilter, 
+        degradedNodes, 
+        setNotificationsFilter, 
+        notificationsFilter, 
+        setFilteredNotifications, 
+        filteredNotifications,
+        refreshData
+      }}
+    >
+      {children}
+    </NodeContext.Provider>
+  );
+};
