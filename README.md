@@ -1,433 +1,463 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Card, CardContent, Typography, Grid, Popover, Table, TableHead, TableBody, TableRow, TableCell, Box, Modal, IconButton, TextField, Button } from '@mui/material';
-import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
-import CloseIcon from '@mui/icons-material/Close';
-import SsidChartIcon from '@mui/icons-material/SsidChart';
-import Node from './Node';
-import sort_by from '../utils';
-import moment from 'moment-timezone';
+import React, { createContext, useState, useEffect } from 'react';
+import { useIndexedDB } from "react-indexed-db-hook";
+import REGIONS_MAPPING from './constants/REGION_MAPPING.json';
+import axiosClient from './api/client';
 
-const ptTimeZone = 'America/Los_Angeles';
+export const NodeContext = createContext(null);
 
-const modal = {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    minWidth: 400,
-    bgcolor: 'background.paper',
-    border: '2px solid #000',
-    boxShadow: 24,
-    padding: 4,
-    width: '75%',
-    maxHeight: '85vh', 
-    overflowY: 'auto',
-};
+const groupByRegions = (data) => {
+  return data.reduce((acc, curr) => {
+    const largerRegion = REGIONS_MAPPING[curr.pool];
 
-const Region = ({ region, nodes }) => {
-    const currentDate = moment().tz(ptTimeZone);
-    const [openChart, setOpenChart] = useState(false);
-    const [expanded, setExpanded] = useState(false);
-    const [showRegion, setShowRegion] = useState(false);
-    const [health, setHealth] = useState({
-        health: 'normal',
-        nodes: 0,
-        criticals: 0,
-        major: 0,
-        oor: 0,
-        normal: 0,
-        backgroundColor: '#198754'
+    if (!acc[largerRegion]) {
+      acc[largerRegion] = {};
+    }
+
+    if (!acc[largerRegion][curr.pool]) {
+      acc[largerRegion][curr.pool] = [];
+    }
+
+    acc[largerRegion][curr.pool].push(curr);
+
+    return acc;
+  }, {});
+}
+
+
+const groupByPool = (data) => {
+  return data.reduce((acc, curr) => {
+    if (!acc[curr.pool]) {
+      acc[curr.pool] = [];
+      acc[curr.pool].push(curr);
+    } else {
+      acc[curr.pool].push(curr);
+    }
+
+    return acc
+  }, {})
+}
+
+const getFilters = (data) => {
+  return data.reduce((acc, curr) => {
+    if (acc.pools.indexOf(curr.pool) === -1) {
+      acc.pools.push(curr.pool)
+    }
+
+    if (acc.nodetype.indexOf(curr.nodetype) === -1) {
+      acc.nodetype.push(curr.nodetype)
+    }
+
+    if (acc.regions.indexOf(curr.timezone) === -1) {
+      acc.regions.push(curr.timezone)
+    }
+
+    return acc
+  }, {
+    nodetype: ['All'],
+    regions: ['All'],
+    pools: ['All'],
+  })
+}
+
+export const NodeProvider = ({ children }) => {
+  const { add, getAll } = useIndexedDB("alerts");
+  const tech = ['tas', 'cscf', 'bgcf', 'catf', 'vss', 'csbg', 'sbi'];
+  const [data, setData] = useState([]);
+  const [stats, setStats] = useState([]);
+  const [processedStats, setProcessedStats] = useState({});
+  const [nodeData, setNodeData] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [nest, setNest] = useState([]);
+  const [avg, setAvg] = useState([]);
+  const [oor, toggleOOR] = useState(localStorage.getItem('oor') ? localStorage.getItem('oor') === 'true' ? true : false : true);
+  const [allAlerts, setAllAlerts] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [notifications, setNotifications] = useState(false);
+  const [fetchAlerts, setFetchAlerts] = useState(false);
+  const [error, setError] = useState(false);
+  const [priorityFilter, setPriorityFilter] = useState(['normal', 'oor', 'major', 'critical']);
+  const [notificationsFilter, setNotificationsFilter] = useState({priorities: ['critical'], timeRange: '1hr'});
+
+  const fetchAllNodes = async () => {
+    setDataLoading(true);
+    try {
+      let data = await axiosClient.get(`/api/getAllConfig?_=${new Date().getTime()}`, {
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      });
+      setError(false);
+      setDataLoading(false);
+      const config = data?.data?.config || {};
+      const nodes = Object.values(config);
+      setNodeData(nodes);
+    } catch(err) {
+      setError(false);
+      setDataLoading(false);
+      setNodeData([]);
+    }
+  }
+
+  const fetchNest = async () => {
+    try {
+      const { data } = await axiosClient.get(`/api/getNestInfo/?_=${new Date().getTime()}`, {
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      });
+      setError(false);
+      setNest(data?.data);
+    } catch(err) {
+      setError(false);
+      setNest([]);
+    }
+  }
+
+  const fetchNotes = async () => {
+    const { data } = await axiosClient.get(`/api/getNotes?_=${new Date().getTime()}`, {
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
+    });
+    setNotes(data?.data);
+  }
+
+  const fetchStats = async () => {
+    const promiseArray = tech.map(t => axiosClient.get(`/api/getNodeStats/?nodeType=${t}&_=${new Date().getTime()}`, {
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
+    }));
+
+    Promise.all(promiseArray).then(res  => {
+      const result = res.reduce((acc, curr, index) => {
+        acc = [...acc, ...curr?.data?.data]
+        return acc
+      }, []);
+      setError(false);
+      setStats(result);
+    }).catch(err => {
+      setError(false);
+      setStats([]);
+    });
+  }
+
+  const fetchAverage = async () => {
+    const promiseArray = tech.map(t => axiosClient.get(`/api/getNodeTrends/?techType=${t}&_=${new Date().getTime()}`, {
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
+    }));
+
+    Promise.all(promiseArray).then(res  => {
+      const result = res.reduce((acc, curr, index) => {
+        acc = [...acc, ...curr?.data?.data]
+        return acc
+      }, []);
+      setError(false);
+      setAvg(result);
+    }).catch(err => {
+      setError(false);
+      setAvg([]);
+    });
+  }
+
+  const postAlerts = async (data) => {
+    
+    let alertsData = await data.map((_) => ({
+        'alert_time' : _.timestamp,
+        'node' : _.host_name,
+        'current_state' : _.priority,
+        'previous_state' : _.prevPriority,
+        'kpi_name' : _.kpi,
+        'status' : _.isNew ? 'New' : 'Updated'
+    }));
+  
+    try {
+      let response = await axiosClient.post(`/api/saveAlerts`, alertsData, {
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      });
+    } catch(err) {
+      console.log("error in storing alerts", err);
+    }
+  }
+
+  useEffect(() => {
+    if (stats && stats.length) {
+      processStats();
+    }
+  }, [stats, avg]);
+
+  useEffect(() => {
+    if (data && data.length && data[0].stats && fetchAlerts) {
+      processAlerts();
+    }
+  }, [data]);
+
+  useEffect(() => {
+    fetchAllNodes();
+    fetchNest();
+    fetchNotes();
+    fetchAverage();
+    fetchStats();
+
+    getAll().then(res => {
+      if (res && res.length) {
+        setAllAlerts(res);
+      }
+    })
+
+    const interval = setInterval(() => {
+      fetchAllNodes();
+      fetchNest()
+      fetchNotes();
+      fetchAverage();
+      fetchStats();
+    }, 300000);
+
+    // return () => clearInterval(interval);
+  }, [])
+
+  useEffect(() => {
+    const nodeWorker = new Worker('/workers/processNodes.js');
+
+    if (nodeData && nodeData.length > 0) {
+      if (processedStats && Object.keys(processedStats).length) {
+        nodeWorker.postMessage({
+          nodes: nodeData,
+          notes: notes,
+          stats: processedStats,
+          nest: nest
+        });
+      } else {
+        nodeWorker.postMessage({
+          nodes: nodeData,
+          notes: notes,
+          nest: nest
+        });
+      }
+
+      nodeWorker.onmessage = function (e) {
+        setData(e.data);
+        nodeWorker.terminate();
+      };
+    }
+
+    return () => nodeWorker.terminate();
+  }, [nodeData, processedStats, notes, nest]);
+
+  const processStats = () => {
+    const statsWorker = new Worker('/workers/processStats.js');
+    statsWorker.postMessage({
+      stats: [
+        ...stats
+      ],
+      avg
     });
 
-    const [anchorEl, setAnchorEl] = React.useState(null);
-    const [healthEl, setHealthEl] = React.useState(null);
-    const [chartFilters, setChartFilters] = React.useState({startDateTime: moment.tz(ptTimeZone).subtract(24, 'hours').format('YYYY-MM-DDTHH:mm:ss'), endDateTime:  currentDate.format('YYYY-MM-DDTHH:mm:ss')});
-    const [from, setFrom] = useState(moment(chartFilters.startDateTime).valueOf());
-    const [to, setTo] = useState(moment(chartFilters.endDateTime).valueOf());
-
-    const handlePopoverOpen = (event) => {
-        if (nodes.filter(_ => _.priority && _.priority !== 'normal' && _.priority !== 'oor').length === 0) {
-            return
-        }
-        setAnchorEl(event.currentTarget);
+    statsWorker.onmessage = function (e) {
+      setFetchAlerts(true);
+      setProcessedStats(e.data);
+      statsWorker.terminate();
     };
 
-    const handlePopoverClose = () => {
-        setAnchorEl(null);
+    statsWorker.onerror = function (event) {
+      setProcessedStats({});
+      statsWorker.terminate();
+    };
+  }
+
+  const processAlerts = () => {
+    const alertsWorker = new Worker('/workers/processAlerts.js');
+    let previousData = window.localStorage.getItem('alerts');
+    previousData = previousData ? JSON.parse(previousData) : {};
+    alertsWorker.postMessage({
+      nodes: data,
+      previousData: previousData
+    });
+
+    alertsWorker.onmessage = function (e) {
+      const { alerts, newData, previousData } = e.data;
+      window.localStorage.setItem('alerts', JSON.stringify({ ...previousData, ...newData }));
+      setAllAlerts([...allAlerts, ...alerts]);
+      setAlerts(alerts);
+      if(alerts.length){
+        postAlerts(alerts);
+      }
+      setFetchAlerts(false);
+      alerts?.forEach(_ => add(_));
+      alertsWorker.terminate();
     };
 
-    const open = Boolean(anchorEl);
-
-    const handleHealthPopoverOpen = (event) => {
-        setHealthEl(event.currentTarget);
+    alertsWorker.onerror = function (event) {
+      setFetchAlerts(false);
+      setAlerts([]);
+      alertsWorker.terminate();
     };
+  }
 
-    const handleHealthPopoverClose = () => {
-        setHealthEl(null);
-    };
+  const [nodes, setNodes] = useState(groupByPool(data));
+  const [basefilters, setBasefilters] = useState(getFilters(data));
+  const [filteredNodes, setFilteredNodes] = useState(data);
+  const [hasFilters, setHasFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    nodetype: 'All',
+    regions: 'All',
+    pools: 'All',
+  });
 
-    const healthOpen = Boolean(healthEl);
+  useEffect(() => {
+    if (data.length) {
+      if (oor) {
+        const temp = data.filter(_ => _.nestStatus?.toLowerCase() === 'inservice');
+        setNodes(groupByPool(temp));
+        setBasefilters(getFilters(temp));
+        setFilteredNodes(groupByRegions(temp));
+      } else {
+        setNodes(groupByPool(data));
+        setBasefilters(getFilters(data));
+        setFilteredNodes(groupByRegions(data));
+      }
+    }
+  }, [data]);
 
-    const containerStyle = {
-        display: 'inline-block',
-        verticalAlign: 'top',
-        width: '25%',
-        transition: 'width 0.3s',
-    };
-
-    useEffect(() => {
-        if (expanded) {
-            setShowRegion(false);
-        } else {
-            setShowRegion(true);
-        }
-    }, [expanded])
-
-    const getPoolHealth = () => {
-        const pr = nodes.map(node => node.priority);
-        const total = nodes.length;
-        const criticals = pr.filter(_ => _ === 'critical')?.length;
-        const major = pr.filter(_ => _ === 'major')?.length;
-        const oor = pr.filter(_ => _ === 'oor')?.length;
-        const normal = pr.filter(_ => _ === 'normal')?.length;
-        let health = 'normal';
-        let background = '#198754';
-
-        if (criticals || major) {
-            const cpr = Math.round((criticals / total) * 100);
-            const mpr = Math.round((major / total) * 100);
-            const ovr = Math.round(((criticals + major) / total) * 100);
-
-            if (cpr >= 20) {
-                health = 'critical';
-                background = '#ff0040';
-            } else if (mpr >= 20) {
-                health = 'major';
-                background = '#f2630a';
-            } else if (ovr >= 20) {
-                health = 'critical';
-                background = '#ff0040';
-            }
+  const processFilters = (filters) => {
+    if (Object.keys(filters).length) {
+      let filtered = data.filter((node) => {
+        if (filters.nodetype && filters.nodetype !== 'All' && filters.nodetype !== node.nodetype) {
+          return false
+        } else if (filters.regions && filters.regions !== 'All' && filters.regions !== node.pool) {
+          return false
+        } else if (filters.pools && filters.pools !== 'All' && filters.pools !== node.pool) {
+          return false
         }
 
-        setHealth({
-            health,
-            nodes: total,
-            criticals,
-            major,
-            oor,
-            normal,
-            background
-        });
+        return true;
+      });
+
+      if (filters.nodetype !== 'All' || filters.regions !== 'All' || filters.pools !== 'All' || filtered.length !== data.length) {
+        setHasFilters(true);
+      } else {
+        setHasFilters(false);
+      }
+
+      if (oor) {
+        filtered = filtered?.filter(_ => _.nestStatus?.toLowerCase() === 'inservice');
+      }
+
+      if (priorityFilter.length > 0) {
+        filtered = filtered?.filter(_ => priorityFilter.includes(_.priority));
+      }
+
+      setFilteredNodes(groupByRegions(filtered));
+      setNodes(groupByPool(filtered));
+    } else {
+      setFilteredNodes(groupByRegions(data));
+      setHasFilters(false);
+      setNodes(groupByPool(data));
+    }
+  }
+
+  useEffect(() => {
+    if (data.length) {
+      processFilters(filters);
+    }
+  }, [filters, oor, priorityFilter]);
+
+  const resetFilters = () => {
+    setFilters({ nodetype: 'All', regions: 'All', pools: 'All' });
+  }
+
+  const setSearch = (search) => {
+    if (search) {
+      const notefiltered = data.filter(_ => _.host_name?.toLowerCase()?.includes(search?.toLowerCase()));
+      const poolfiltered = data.filter(_ => _.pool?.toLowerCase()?.includes(search?.toLowerCase()));
+      const seen = {};
+      const filtered = [...notefiltered, ...poolfiltered].filter(item => !(item.host_name in seen) && (seen[item.host_name] = true));
+      setHasFilters(true);
+      setFilteredNodes(groupByRegions(filtered));
+      setNodes(groupByPool(filtered));
+    } else {
+      processFilters(filters);
+    }
+  }
+
+  const syncNotes = () => {
+    fetchNotes();
+  }
+
+  const [degradedNodes, setDegradedNodes] = useState(false);
+
+  useEffect(() => {
+    if (degradedNodes) {
+      setPriorityFilter(['critical', 'major']);
+    } else {
+      setPriorityFilter(['critical', 'major', 'oor', 'normal']);
+    }
+  }, [degradedNodes]);
+
+  // Set filtered notifications data
+  const [filteredNotifications, setFilteredNotifications] = useState({
+    allAlerts: [],
+    alerts: [],
+  });
+
+  // Process Notificaiton filters
+  const processNotificationFilters = () => {
+    let filteredAllAlerts;
+    let filteredAlerts;
+    const currentTime = new Date(); // Current time
+
+    // Time range filter
+    if(notificationsFilter.timeRange && notificationsFilter.timeRange == "1hr"){
+      const oneHourAgo = new Date(currentTime.getTime() - 60 * 60 * 1000); // Time one hour ago
+
+      // Filter objects based on timestamp
+      filteredAlerts = alerts.filter(obj => {
+          const objTime = new Date(obj.timestamp); 
+          return objTime >= oneHourAgo && objTime <= currentTime; 
+      });
+
+      // Filter objects based on timestamp
+      filteredAllAlerts = allAlerts.filter(obj => {
+        const objTime = new Date(obj.timestamp); 
+        return objTime >= oneHourAgo && objTime <= currentTime;
+      });
+    }else if(notificationsFilter.timeRange && notificationsFilter.timeRange == "24hrs"){
+      const oneDayAgo = new Date(currentTime.getTime() - 24 * 60 * 60 * 1000); // Time 24 hours ago
+  
+      // Filter objects based on timestamp
+      filteredAlerts = alerts.filter(obj => {
+          const objTime = new Date(obj.timestamp); 
+          return objTime >= oneDayAgo && objTime <= currentTime;
+      });  
+
+      // Filter objects based on timestamp
+      filteredAllAlerts = allAlerts.filter(obj => {
+        const objTime = new Date(obj.timestamp);
+        return objTime >= oneDayAgo && objTime <= currentTime;
+      });
+    }else {
+      filteredAlerts = alerts;
+      filteredAllAlerts = allAlerts;
     }
 
-    useEffect(() => {
-        getPoolHealth();
-    }, [nodes]);
-
-    const getColorPriority = () => {
-        const pr = nodes.map(node => node.priority)
-        const priority = [...new Set(pr)];
-        if (priority.length > 0) {
-            if (priority.indexOf('critical') !== -1) {
-                return '#ff0040';
-            } else if (priority.indexOf('major') !== -1) {
-                return '#f2630a';
-            } else if (priority.indexOf('minor') !== -1) {
-                return '#ffbf00';
-            } else if (priority.indexOf('normal') !== -1) {
-                return '#198754';
-            } else if (priority.indexOf('oor') !== -1) {
-                return '#198754';
-            } else {
-                return 'darkgray';
-            }
-        } else {
-            return 'rgb(128, 128, 128)';
-        }
+    // Priorities filter
+    if(notificationsFilter.priorities.length){
+      filteredAllAlerts = filteredAllAlerts.filter((alert) => notificationsFilter.priorities.includes(alert.priority));
+      filteredAlerts = filteredAlerts.filter((newAlert) => notificationsFilter.priorities.includes(newAlert.priority));
     }
 
-    const getHealthColor = () => {
-        if (health?.health === 'normal') {
-            if (health?.criticals > 0) {
-                return '#ff0040';
-            } else if (health?.major > 0) {
-                return '#f2630a';
-            } else {
-                return 'white';
-            }
-        } else {
-            return 'white';
-        }
-    }
+    setFilteredNotifications({allAlerts: filteredAllAlerts, alerts: filteredAlerts});
+  }
 
-    const handleChartFilterChange = (event, key) => {
-        setChartFilters({
-            ...chartFilters,
-            [key]: moment(event.target.value).format('YYYY-MM-DDTHH:mm:ss')
-        });
-    }
+  // Trigger when notifications filter changes
+  useEffect(() => {
+    processNotificationFilters()
+  }, [notificationsFilter, alerts, allAlerts])
 
-    const updateGrafana = () => {
-        setFrom(moment(chartFilters.startDateTime).valueOf());
-        setTo(moment(chartFilters.endDateTime).valueOf());
-    }
-
-    return (
-        <div style={containerStyle}>
-            {
-                showRegion && (
-                    <>
-                        <Card
-                            style={{
-                                border: '2px solid black',
-                                margin: '4px',
-                                backgroundColor: health?.background || getColorPriority(),
-                                color: 'white',
-                            }}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setAnchorEl(null);
-                                setExpanded(!expanded)
-                            }}
-                        >
-                            <CardContent style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center'
-                            }}>
-                                <Typography sx={{ width: 'auto', display: 'inline-block' }} aria-owns={open ? 'mouse-over-popover' : undefined}
-                                    aria-haspopup="true"
-                                    onMouseEnter={handlePopoverOpen}
-                                    onMouseLeave={handlePopoverClose} variant="h6">{region}</Typography>
-                                <Box>
-                                    <SsidChartIcon style={{marginRight: '8px'}} onClick={() => setOpenChart(true)} />
-                                    <MonitorHeartIcon aria-owns={healthOpen ? 'health-popover' : undefined}
-                                        aria-haspopup="true" onMouseEnter={handleHealthPopoverOpen}
-                                        onMouseLeave={handleHealthPopoverClose} style={{
-                                            color: getHealthColor()
-                                        }} />
-                                </Box>
-                            </CardContent>
-                        </Card>
-                        <Popover
-                            id="mouse-over-popover"
-                            sx={{
-                                pointerEvents: 'none'
-                            }}
-                            open={open}
-                            anchorEl={anchorEl}
-                            anchorOrigin={{
-                                vertical: 'bottom',
-                                horizontal: 'left',
-                            }}
-                            transformOrigin={{
-                                vertical: 'top',
-                                horizontal: 'left',
-                            }}
-                            onClose={handlePopoverClose}
-                            disableRestoreFocus
-                        >
-                            <Card>
-                                <CardContent>
-                                    <Grid container>
-                                        {nodes.filter(_ => _.priority && _.priority !== 'normal' && _.priority !== 'oor').map(node => (
-                                            <Node style={{
-                                                minWidth: '32.85%', minHeight: 60,
-                                                border: '1px solid black',
-                                                borderRadius: 0,
-                                                margin: '1px',
-                                            }} key={node.host_name} node={node} />
-                                        ))}
-                                    </Grid>
-                                </CardContent>
-                            </Card>
-                        </Popover>
-                        <Popover
-                            id="health-popover"
-                            sx={{
-                                pointerEvents: 'none'
-                            }}
-                            open={healthOpen}
-                            anchorEl={healthEl}
-                            anchorOrigin={{
-                                vertical: 'bottom',
-                                horizontal: 'left',
-                            }}
-                            transformOrigin={{
-                                vertical: 'top',
-                                horizontal: 'left',
-                            }}
-                            onClose={handleHealthPopoverClose}
-                            disableRestoreFocus
-                        >
-                            <Card>
-                                <CardContent style={{
-                                    display: 'flex',
-                                    justifyContent: 'center',
-                                    flexDirection: 'column'
-                                }}>
-                                    <Typography sx={{ width: 'auto', display: 'inline-block', textAlign: 'center' }} variant="h6">Pool Stats</Typography>
-                                    <Table>
-                                        <TableHead>
-                                            <TableRow>
-                                                <TableCell>
-                                                    Nodes
-                                                </TableCell>
-                                                <TableCell>
-                                                    Count
-                                                </TableCell>
-                                            </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                            <TableRow>
-                                                <TableCell>
-                                                    Critical
-                                                </TableCell>
-                                                <TableCell>
-                                                    {health?.criticals}
-                                                </TableCell>
-                                            </TableRow>
-                                            <TableRow>
-                                                <TableCell>
-                                                    Major
-                                                </TableCell>
-                                                <TableCell>
-                                                    {health?.major}
-                                                </TableCell>
-                                            </TableRow>
-                                            <TableRow>
-                                                <TableCell>
-                                                    OOR
-                                                </TableCell>
-                                                <TableCell>
-                                                    {health?.oor}
-                                                </TableCell>
-                                            </TableRow>
-                                            <TableRow>
-                                                <TableCell>
-                                                    Normal
-                                                </TableCell>
-                                                <TableCell>
-                                                    {health?.normal}
-                                                </TableCell>
-                                            </TableRow>
-                                        </TableBody>
-                                    </Table>
-                                </CardContent>
-                            </Card>
-                        </Popover>
-                    </>
-
-                )
-            }
-            {expanded && (
-                <Card style={{
-                    border: '2px solid black',
-                    margin: '4px'
-                }}>
-                    <CardContent>
-                        <Grid container spacing={1}>
-                            {
-                                !showRegion && (
-                                    <Node
-                                        style={{
-                                        backgroundColor: 'lightgray', minWidth: '32.85%', minHeight: 35,
-                                        border: '1px solid black',
-                                        borderRadius: 0,
-                                        margin: '1px'
-                                    }} key={region} node={{ host_name: region }} color={'black'} bgcolor={'lightgray'} onClick={() => setExpanded(!expanded)} enableContextMenu={false} />
-                                )
-                            }
-                            {nodes?.sort(sort_by('host_name', false, (a) => a.toUpperCase()))?.map(node => (
-                                <Node style={{
-                                    minWidth: '32.85%', minHeight: 35,
-                                    border: '1px solid black',
-                                    borderRadius: 0,
-                                    margin: '1px'
-                                }} key={node.host_name} node={node} />
-                            ))}
-                        </Grid>
-                    </CardContent>
-                </Card>
-            )}
-
-            <Modal
-                open={openChart}
-                onClose={() => { setOpenChart(false); }}
-                aria-labelledby="chart-modal-title"
-                aria-describedby="chart-modal-description"
-            >
-                <Box sx={modal}>
-                    <Box sx={{display: 'flex', justifyContent: 'space-between', color: '#d6006e'}}>
-                        <Typography id="chart-modal-filters" variant="h6" component="h4">
-                            Filters
-                        </Typography>
-                        <IconButton sx={{ color: '#d6006e' }} onClick={() => { setOpenChart(false); }}><CloseIcon /></IconButton>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 2, marginY: 2}}>
-                        <TextField
-                            variant="outlined"
-                            label="Start Date Time"
-                            type="datetime-local"
-                            value={chartFilters.startDateTime ? moment(chartFilters.startDateTime).format('YYYY-MM-DDTHH:mm:ss') : ''}
-                            onChange={(event) => handleChartFilterChange(event, 'startDateTime')}
-                        />
-                        <TextField
-                            variant="outlined"
-                            label="End Date Time"
-                            type="datetime-local"
-                            value={chartFilters.endDateTime ? moment(chartFilters.endDateTime).format('YYYY-MM-DDTHH:mm:ss') : ''}
-                            onChange={(event) => handleChartFilterChange(event, 'endDateTime')}
-                        />
-                        <Button variant="contained" color="primary" onClick={updateGrafana}>Update Chart</Button>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', color: '#d6006e' }}>
-                        <Typography id="chart-modal-title" variant="h6" component="h2">
-                            {region} - Pool Chart
-                        </Typography>
-                    </Box>
-                    {from && to &&
-                        <Box>
-                            <iframe src={`https://grafana.tools.nsds.t-mobile.com/d-solo/TAS000003/voicecore-heatmap-tas-performance?tz=America/Los_Angeles&orgId=1&refresh=5m&var-TAS_POOL=${region}&from=${from}&to=${to}&panelId=2&theme=light`}
-                                style={{ width: '100%', height: '275px', border: 'none' }}
-                                frameBorder="0"
-                            ></iframe>
-                            <iframe
-                                src={`https://grafana.tools.nsds.t-mobile.com/d-solo/TAS000003/voicecore-heatmap-tas-performance?tz=America/Los_Angeles&orgId=1&refresh=5m&var-CSCF_POOL=${region}&from=${from}&to=${to}&panelId=4&theme=light`}
-                                style={{ width: '100%', height: '275px', border: 'none' }}
-                                frameBorder="0"
-                            ></iframe>
-                            <iframe
-                                src={`https://grafana.tools.nsds.t-mobile.com/d-solo/TAS000003/voicecore-heatmap-tas-performance?tz=America/Los_Angeles&orgId=1&refresh=5m&var-BGCF_POOL=${region}&from=${from}&to=${to}&panelId=6&theme=light`}
-                                style={{ width: '100%', height: '275px', border: 'none' }}
-                                frameBorder="0"
-                            ></iframe>
-                            <iframe src={`https://grafana.tools.nsds.t-mobile.com/d-solo/TAS000003/voicecore-heatmap-tas-performance?tz=America/Los_Angeles&orgId=1&refresh=5m&var-CATF_POOL=${region}&from=${from}&to=${to}&panelId=8&theme=light`}
-                                style={{ width: '100%', height: '275px', border: 'none' }}
-                                frameBorder="0"
-                            ></iframe>
-                            <iframe
-                                src={`https://grafana.tools.nsds.t-mobile.com/d-solo/TAS000003/voicecore-heatmap-tas-performance?tz=America/Los_Angeles&orgId=1&refresh=5m&var-VSS_POOL=${region}&from=${from}&to=${to}&panelId=10&theme=light`}
-                                style={{ width: '100%', height: '275px', border: 'none' }}
-                                frameBorder="0"
-                            ></iframe>
-                            <iframe
-                                src={`https://grafana.tools.nsds.t-mobile.com/d-solo/TAS000003/voicecore-heatmap-tas-performance?tz=America/Los_Angeles&orgId=1&refresh=5m&var-SBI_POOL=${region}&from=${from}&to=${to}&panelId=12&theme=light`}
-                                style={{ width: '100%', height: '275px', border: 'none' }}
-                                frameBorder="0"
-                            ></iframe>
-                            <iframe
-                                src={`https://grafana.tools.nsds.t-mobile.com/d-solo/TAS000003/voicecore-heatmap-tas-performance?tz=America/Los_Angeles&orgId=1&refresh=5m&var-CSBG_POOL=${region}&from=${from}&to=${to}&panelId=14&theme=light`}
-                                style={{ width: '100%', height: '275px', border: 'none' }}
-                                frameBorder="0"
-                            ></iframe>
-                        </Box>
-                    }
-                </Box>
-            </Modal>
-        </div>
-    );
-};
-
-export default Region;
+  return <NodeContext.Provider value={{ nodes, setNodes, basefilters, filters, setFilters, filteredNodes, hasFilters, resetFilters, setSearch, dataLoading, syncNotes, oor, toggleOOR, alerts, allAlerts, notifications, setNotifications, error, setPriorityFilter, setDegradedNodes, priorityFilter, degradedNodes, setNotificationsFilter, notificationsFilter, setFilteredNotifications, filteredNotifications }}>{children}</NodeContext.Provider>
+}
