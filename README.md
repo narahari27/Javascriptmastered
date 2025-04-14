@@ -1,4 +1,17 @@
-// Replace the section in your Dashboard.jsx that handles the view rendering
+// First, make sure you have these imports at the top of your Dashboard.jsx file:
+import { 
+  CircularProgress, 
+  Grid, 
+  Stack, 
+  Checkbox, 
+  Button,
+  Box,
+  Typography,
+  Card,
+  CardContent
+} from "@mui/material";
+
+// Then replace the section in your Dashboard.jsx that handles the view rendering
 // Find the section where you check the "view" state variable
 
 // Grid container that holds both view types
@@ -18,75 +31,84 @@
     </>
   )}
 
-  {/* Node View - Show when view is true - Using hardcoded data */}
+  {/* Node View - Show when view is true - Using hardcoded data that matches your project style */}
   {view && (
-    <Box sx={{ width: '100%', p: 2 }}>
-      {/* Hardcoded Regions */}
+    <>
       {['HYDERABAD', 'BANGALORE', 'INDORE', 'MUMBAI'].map((region) => (
         <Box
           key={region}
-          sx={{
-            mb: 4,
-            border: '1px solid #e0e0e0',
-            borderRadius: '8px',
-            overflow: 'hidden'
+          style={{
+            width: "50%",
+            padding: 0,
+            margin: 0,
+            border: "2px solid black",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
           }}
         >
-          {/* Region Header */}
-          <Box sx={{ 
-            p: 2, 
-            backgroundColor: '#d6006e', 
-            color: 'white',
-            borderBottom: '1px solid #e0e0e0' 
+          <Card style={{
+            border: '2px solid black',
+            margin: '4px'
           }}>
-            <Typography variant="h6">{region}</Typography>
-          </Box>
-          
-          {/* Nodes Grid */}
-          <Box sx={{ p: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {/* Generate 6-10 random nodes for each region */}
-            {Array.from({ length: Math.floor(Math.random() * 5) + 6 }, (_, i) => {
-              // Random platform for each node
-              const platforms = ['SONY', 'ZEE', 'STAR', 'KNITE'];
-              const platform = platforms[Math.floor(Math.random() * platforms.length)];
-              
-              // Random priority with higher chance of normal
-              const priorities = ['normal', 'normal', 'normal', 'critical', 'oor'];
-              const priority = priorities[Math.floor(Math.random() * priorities.length)];
-              
-              // Create node object
-              const node = {
-                host_name: `${platform}-${region.substring(0, 3)}-${i + 1}`,
-                priority: priority,
-                nodetype: platform.toLowerCase(),
-                pool: region
-              };
-              
-              // Use the existing Node component to render
-              return (
-                <Box key={i} sx={{ width: '150px' }}>
-                  <Card
-                    sx={{
-                      backgroundColor: 
-                        priority === 'critical' ? '#ff0040' :
-                        priority === 'oor' ? '#0a58ca' : '#198754',
-                      color: 'white',
-                      cursor: 'pointer',
-                      mb: 1
-                    }}
-                  >
-                    <CardContent sx={{ p: 1 }}>
-                      <Typography variant="body2" sx={{ fontSize: '12px' }}>
-                        {node.host_name}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                </Box>
-              );
-            })}
-          </Box>
+            <CardContent>
+              <Grid container spacing={1}>
+                {/* Node that shows region name */}
+                <Node
+                  style={{
+                    backgroundColor: 'lightgray', 
+                    minWidth: '32.85%', 
+                    minHeight: 35,
+                    border: '1px solid black',
+                    borderRadius: 0,
+                    margin: '1px'
+                  }} 
+                  key={region} 
+                  node={{ host_name: region }} 
+                  color={'black'} 
+                  bgcolor={'lightgray'} 
+                  enableContextMenu={false} 
+                />
+                
+                {/* Generate random nodes for this region */}
+                {Array.from({ length: Math.floor(Math.random() * 15) + 10 }, (_, i) => {
+                  // Random platform for each node
+                  const platforms = ['SONY', 'ZEE', 'STAR', 'KNITE'];
+                  const platform = platforms[Math.floor(Math.random() * platforms.length)];
+                  
+                  // Random priority with higher chance of normal
+                  const priorities = ['normal', 'normal', 'normal', 'critical', 'oor'];
+                  const priority = priorities[Math.floor(Math.random() * priorities.length)];
+                  
+                  // Create node object
+                  const node = {
+                    host_name: `${platform}-${region.substring(0, 3)}-${i + 1}`,
+                    priority: priority,
+                    nodetype: platform.toLowerCase(),
+                    pool: region,
+                    nestStatus: 'inservice'
+                  };
+                  
+                  // Use your existing Node component with the same styling
+                  return (
+                    <Node 
+                      style={{
+                        minWidth: '32.85%', 
+                        minHeight: 35,
+                        border: '1px solid black',
+                        borderRadius: 0,
+                        margin: '1px'
+                      }} 
+                      key={`node-${region}-${i}`} 
+                      node={node} 
+                    />
+                  );
+                })}
+              </Grid>
+            </CardContent>
+          </Card>
         </Box>
       ))}
-    </Box>
+    </>
   )}
 </Grid>
