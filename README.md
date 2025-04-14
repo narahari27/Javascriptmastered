@@ -1,100 +1,92 @@
-// Find the filter checkboxes section in your Dashboard.jsx file
-// Replace it with this updated version with only critical, normal, and OOR filters
+// Replace the section in your Dashboard.jsx that handles the view rendering
+// Find the section where you check the "view" state variable
 
-// This is the section to replace:
-<Grid container gap={2} sx={{ marginBottom: "24px" }}>
-  {/* Keep only critical, normal and OOR filters */}
-  <Box sx={{ display: "flex", alignItems: "center" }}>
-    <Checkbox
-      checked={selectedFilters.includes("critical")}
-      onChange={(e) => handleFilterToggle("critical", e)}
-      sx={{
-        "& .MuiSvgIcon-root": {
-          color: "#ff0040",
-        },
-        "&.Mui-checked .MuiIconButton-root": {
-          backgroundColor: "#ff0040",
-        },
-      }}
-    />
-    <Typography sx={{ marginLeft: "4px" }} variant="body">
-      Critical
-    </Typography>
-  </Box>
-  <Box sx={{ display: "flex", alignItems: "center" }}>
-    <Checkbox
-      checked={selectedFilters.includes("oor")}
-      onChange={(e) => handleFilterToggle("oor", e)}
-      sx={{
-        color: "#0a58ca",
-        "&.Mui-checked": {
-          color: "#0a58ca",
-        },
-      }}
-    />
-    <Typography sx={{ marginLeft: "4px" }} variant="body">
-      OOR
-    </Typography>
-  </Box>
-  <Box sx={{ display: "flex", alignItems: "center" }}>
-    <Checkbox
-      checked={selectedFilters.includes("normal")}
-      onChange={(e) => handleFilterToggle("normal", e)}
-      sx={{
-        color: "#198754",
-        "&.Mui-checked": {
-          color: "#198754",
-        },
-      }}
-    />
-    <Typography sx={{ marginLeft: "4px" }} variant="body">
-      Normal
-    </Typography>
-  </Box>
+// Grid container that holds both view types
+<Grid style={{ transform: `scale(${scale})` }} container>
+  {/* Pool View - Show when view is false */}
+  {!view && (
+    <>
+      {Object.keys(nodes || {})
+        .sort()
+        .map((region) => (
+          <Region
+            key={region}
+            region={region}
+            nodes={nodes[region] || []}
+          />
+        ))}
+    </>
+  )}
 
-  <div className="controls">
-    <IconButton onClick={handleZoomIn}>
-      <ZoomInIcon sx={{ color: "#d6006e" }} />
-    </IconButton>
-    <IconButton onClick={handleZoomOut}>
-      <ZoomOutIcon sx={{ color: "#d6006e" }} />
-    </IconButton>
-
-    <Typography
-      sx={{ marginLeft: "4px", color: "#d6006e" }}
-      variant="body"
-    >
-      Use Ctrl +/- for window zoom in and out
-    </Typography>
-  </div>
+  {/* Node View - Show when view is true - Using hardcoded data */}
+  {view && (
+    <Box sx={{ width: '100%', p: 2 }}>
+      {/* Hardcoded Regions */}
+      {['HYDERABAD', 'BANGALORE', 'INDORE', 'MUMBAI'].map((region) => (
+        <Box
+          key={region}
+          sx={{
+            mb: 4,
+            border: '1px solid #e0e0e0',
+            borderRadius: '8px',
+            overflow: 'hidden'
+          }}
+        >
+          {/* Region Header */}
+          <Box sx={{ 
+            p: 2, 
+            backgroundColor: '#d6006e', 
+            color: 'white',
+            borderBottom: '1px solid #e0e0e0' 
+          }}>
+            <Typography variant="h6">{region}</Typography>
+          </Box>
+          
+          {/* Nodes Grid */}
+          <Box sx={{ p: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {/* Generate 6-10 random nodes for each region */}
+            {Array.from({ length: Math.floor(Math.random() * 5) + 6 }, (_, i) => {
+              // Random platform for each node
+              const platforms = ['SONY', 'ZEE', 'STAR', 'KNITE'];
+              const platform = platforms[Math.floor(Math.random() * platforms.length)];
+              
+              // Random priority with higher chance of normal
+              const priorities = ['normal', 'normal', 'normal', 'critical', 'oor'];
+              const priority = priorities[Math.floor(Math.random() * priorities.length)];
+              
+              // Create node object
+              const node = {
+                host_name: `${platform}-${region.substring(0, 3)}-${i + 1}`,
+                priority: priority,
+                nodetype: platform.toLowerCase(),
+                pool: region
+              };
+              
+              // Use the existing Node component to render
+              return (
+                <Box key={i} sx={{ width: '150px' }}>
+                  <Card
+                    sx={{
+                      backgroundColor: 
+                        priority === 'critical' ? '#ff0040' :
+                        priority === 'oor' ? '#0a58ca' : '#198754',
+                      color: 'white',
+                      cursor: 'pointer',
+                      mb: 1
+                    }}
+                  >
+                    <CardContent sx={{ p: 1 }}>
+                      <Typography variant="body2" sx={{ fontSize: '12px' }}>
+                        {node.host_name}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Box>
+              );
+            })}
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  )}
 </Grid>
-
-// Also update the "Degraded Nodes" button functionality to only filter critical nodes:
-const handleDegradedNodesToggle = () => {
-  try {
-    const newValue = !degradedNodes;
-    setDegradedNodes(newValue);
-    
-    // Update priority filter to only include critical nodes when degraded is on
-    // or include all (normal, critical, oor) when off
-    setPriorityFilter(newValue ? ['critical'] : ['normal', 'critical', 'oor']);
-  } catch (error) {
-    console.error("Error toggling degraded nodes:", error);
-  }
-};
-
-// Then find the Degraded Nodes button and update its onClick handler:
-<Button
-  variant="contained"
-  onClick={handleDegradedNodesToggle}
-  sx={{
-    textTransform: "none",
-    height: "56px",
-    minWidth: "160px",
-    backgroundColor: !degradedNodes
-      ? "primary"
-      : "rgb(160, 0, 80)",
-  }}
->
-  Degraded Nodes
-</Button>
