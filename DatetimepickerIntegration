@@ -1,0 +1,530 @@
+<div>
+  <!-- Required Libraries -->
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/jquery/latest/jquery.min.js"></script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <div class="custom-dashboard-widget" ng-controller="DashboardCtrl as c">
+    <h2 class="welcome-text">Welcome, {{c.userDisplayName}}!</h2>
+
+    <div class="container-xxl px-3">
+      <div class="d-flex align-items-center flex-nowrap gap-3 mb-3 ps-2 ps-lg-3">
+
+        <!-- Dashboard + Summary + Settings Pill -->
+        <div class="btn-group bg-white border rounded-3 p-1 shadow-sm flex-shrink-0 ms-n4 ms-lg-n5">
+          
+          <!-- Dashboard dropdown -->
+          <div class="btn-group" role="group">
+            <button type="button" class="btn btn-light dropdown-toggle px-3 py-2 rounded-start-3 fs-4" 
+                    data-bs-toggle="dropdown" aria-expanded="false" aria-label="Select dashboard">
+              <span class="text-warning">{{c.activeDashboardLabel}}</span>
+            </button>
+            <ul class="dropdown-menu">
+              <li><button class="dropdown-item" ng-class="{active:c.selectedDashboard==='analytics'}" 
+                          ng-click="c.selectDashboard('analytics')">Dashboard</button></li>
+              <li><button class="dropdown-item" ng-class="{active:c.selectedDashboard==='quality'}" 
+                          ng-click="c.selectDashboard('quality')">Quality Insights</button></li>
+              <li><button class="dropdown-item" ng-class="{active:c.selectedDashboard==='issues'}" 
+                          ng-click="c.selectDashboard('issues')">Issue Analytics</button></li>
+            </ul>
+          </div>
+
+          <!-- Summary dropdown -->
+          <div class="btn-group" role="group">
+            <button type="button" class="btn btn-light dropdown-toggle px-3 py-2 rounded-0 fs-4"
+                    data-bs-toggle="dropdown" aria-expanded="false" aria-label="Summary options">
+              Summary
+            </button>
+            <ul class="dropdown-menu">
+              <li><button class="dropdown-item" type="button" ng-click="c.setTab('agent_summary')">Agent Summary</button></li>
+              <li><button class="dropdown-item" type="button" ng-click="c.setTab('project_summary')">Project Summary</button></li>
+              <li><button class="dropdown-item" type="button" ng-click="c.setTab('team_summary')">Team Summary</button></li>
+            </ul>
+          </div>
+
+          <!-- Settings -->
+          <button type="button" class="btn btn-light px-3 py-2 rounded-end-3 fs-4"
+                  ng-class="{'active': c.activeTab === 'settings'}"
+                  ng-click="c.setTab('settings')" aria-label="Open settings">
+            Settings
+          </button>
+        </div>
+
+        <!-- Channel -->
+        <div class="dropdown flex-shrink-0 ms-auto me-3">
+          <button class="btn btn-light border rounded-3 px-3 py-2 dropdown-toggle fs-4 filter-btn" 
+                  style="width: 15.5rem;" data-bs-toggle="dropdown" type="button" aria-label="Channel">
+            {{(c.selectedChannel && c.selectedChannel.label) || 'All'}}
+          </button>
+          <ul class="dropdown-menu fs-4">
+            <li ng-repeat="ch in c.channels">
+              <button class="dropdown-item"
+                      ng-class="{'active': ch.value === (c.selectedChannel && c.selectedChannel.value)}"
+                      ng-click="c.selectedChannel = ch; c.onFiltersChanged()">
+                {{ch.label}}
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <!-- All Teams -->
+        <div class="dropdown flex-shrink-0 me-3">
+          <button class="btn btn-light border rounded-3 px-3 py-2 dropdown-toggle fs-4 filter-btn" 
+                  style="width: 15.5rem;" data-bs-toggle="dropdown" type="button" aria-label="Teams">
+            All Teams
+          </button>
+          <div class="dropdown-menu p-2 fs-4" style="min-width:260px;">
+            <div class="d-flex justify-content-between mb-2">
+              <button class="btn btn-light" type="button" ng-click="c.selectAllTeams()">Select All</button>
+              <button class="btn btn-light" type="button" ng-click="c.clearAllTeams()">Clear All</button>
+            </div>
+            <input type="text" class="form-control form-control-sm mb-2" placeholder="Search Teams" ng-model="c.searchTeams">
+            <div style="max-height:240px; overflow:auto;">
+              <div class="form-check" ng-repeat="team in c.teams | filter:c.searchTeams">
+                <input class="form-check-input" type="checkbox" id="team_{{$index}}" 
+                       ng-model="team.selected" ng-change="c.onFiltersChanged()">
+                <label class="form-check-label" for="team_{{$index}}">{{team.name}}</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- All Categories -->
+        <div class="dropdown flex-shrink-0 me-3">
+          <button class="btn btn-light border rounded-3 px-3 py-2 dropdown-toggle fs-4 filter-btn" 
+                  style="width: 15.5rem;" data-bs-toggle="dropdown" type="button" aria-label="Categories">
+            All Categories
+          </button>
+          <div class="dropdown-menu p-2 fs-4" style="min-width:260px;">
+            <div class="d-flex justify-content-between mb-2">
+              <button class="btn btn-light btn-sm" type="button" ng-click="c.selectAllCategories()">Select All</button>
+              <button class="btn btn-light btn-sm" type="button" ng-click="c.clearAllCategories()">Clear All</button>
+            </div>
+            <input type="text" class="form-control form-control-sm mb-2" placeholder="Search Categories" ng-model="c.searchCategories">
+            <div style="max-height:240px; overflow:auto;">
+              <div class="form-check" ng-repeat="cat in c.categories | filter:c.searchCategories">
+                <input class="form-check-input" type="checkbox" id="cat_{{$index}}" 
+                       ng-model="cat.selected" ng-change="c.onFiltersChanged()">
+                <label class="form-check-label" for="cat_{{$index}}">{{cat.name}}</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DATE RANGE PICKER - NEW INTEGRATED COMPONENT -->
+        <div class="dropdown flex-shrink-0 me-4">
+          <button class="btn btn-light border rounded-3 px-3 py-2 fs-4 filter-btn" 
+                  style="width: 15.5rem;" 
+                  id="dateRangeBtn_{{c.widget.id}}" 
+                  type="button" 
+                  aria-label="Date range">
+            <i class="bi bi-calendar3"></i> {{c.dateRangeLabel}}
+          </button>
+        </div>
+
+        <!-- Download (right) -->
+        <div class="ms-auto dropdown">
+          <button class="btn btn-warning text-white rounded-3 dropdown-toggle px-3 py-2 fs-4"
+                  data-bs-toggle="dropdown" type="button" aria-label="Download">
+            ⬇
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end fs-4">
+            <li><button class="dropdown-item" ng-click="c.downloadAs('xlsx')">Download as XLSX</button></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Date Range Info Display (Optional) -->
+      <div class="date-info-bar mb-3 p-2 bg-light rounded-3">
+        <small class="text-muted">
+          <strong>Selected Period:</strong> 
+          <span id="startDate_{{c.widget.id}}">{{c.startDate}}</span> to 
+          <span id="endDate_{{c.widget.id}}">{{c.endDate}}</span>
+          (<span id="duration_{{c.widget.id}}">{{c.duration}}</span> days)
+        </small>
+      </div>
+
+      <!-- Content - Dashboard iframe -->
+      <div class="ratio ratio-16x9">
+        <iframe ng-src="{{c.activePageUrl}}" class="border-0 rounded-3 shadow-sm"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// CLIENT SCRIPT (Controller)
+api.controller = function($scope, $rootScope, $timeout) {
+  var c = this;
+
+  // ========== DASHBOARD SETUP ==========
+  c.selectedDashboard = 'analytics';
+  c.activeDashboard = 'analytics';
+  c.activeDashboardLabel = 'Dashboard';
+  c.activeTab = 'summary';
+  c.userDisplayName = $scope.data.userDisplayName || "Admin";
+
+  // ========== DATE RANGE SETUP ==========
+  c.startDate = null;
+  c.endDate = null;
+  c.dateRangeLabel = 'Last 7 days';
+  c.duration = 7;
+
+  // Initialize default date range
+  c.initializeDateRange = function() {
+    c.startDate = moment().subtract(6, 'days').format('YYYY-MM-DD');
+    c.endDate = moment().format('YYYY-MM-DD');
+    c.updateDateInfo();
+  };
+
+  // ========== DATE RANGE PICKER INITIALIZATION ==========
+  c.initDateRangePicker = function() {
+    var dateBtn = $('#dateRangeBtn_' + c.widget.id);
+    
+    if (!dateBtn.length) {
+      console.warn('Date range button not found, retrying...');
+      $timeout(c.initDateRangePicker, 100);
+      return;
+    }
+
+    dateBtn.daterangepicker({
+      startDate: moment().subtract(6, 'days'),
+      endDate: moment(),
+      ranges: {
+        'Today': [moment(), moment()],
+        'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+        'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+        'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+        'This Month': [moment().startOf('month'), moment().endOf('month')],
+        'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')],
+        'Last 3 Months': [moment().subtract(3, 'months').startOf('month'), moment().endOf('month')],
+        'Last 6 Months': [moment().subtract(6, 'months').startOf('month'), moment().endOf('month')]
+      },
+      showDropdowns: true,
+      showWeekNumbers: false,
+      showISOWeekNumbers: false,
+      alwaysShowCalendars: true,
+      opens: 'left',
+      drops: 'down',
+      buttonClasses: ['btn', 'btn-sm'],
+      applyClass: 'btn-primary',
+      cancelClass: 'btn-default',
+      locale: {
+        format: 'MMM DD, YYYY',
+        separator: ' - ',
+        applyLabel: 'Apply',
+        cancelLabel: 'Cancel',
+        fromLabel: 'From',
+        toLabel: 'To',
+        customRangeLabel: 'Custom Range',
+        weekLabel: 'W',
+        daysOfWeek: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
+        monthNames: [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December'
+        ],
+        firstDay: 0
+      }
+    }, function(start, end, label) {
+      // Callback when date range is selected
+      c.onDateRangeChange(start, end, label);
+    });
+
+    console.log('Date range picker initialized successfully');
+  };
+
+  // ========== DATE CHANGE HANDLER ==========
+  c.onDateRangeChange = function(start, end, label) {
+    $scope.$apply(function() {
+      c.startDate = start.format('YYYY-MM-DD');
+      c.endDate = end.format('YYYY-MM-DD');
+      c.dateRangeLabel = label || 'Custom Range';
+      c.duration = end.diff(start, 'days') + 1;
+      
+      c.updateDateInfo();
+      c.broadcastDateChange();
+    });
+  };
+
+  // ========== UPDATE DATE INFO DISPLAY ==========
+  c.updateDateInfo = function() {
+    var startDateSpan = document.getElementById('startDate_' + c.widget.id);
+    var endDateSpan = document.getElementById('endDate_' + c.widget.id);
+    var durationSpan = document.getElementById('duration_' + c.widget.id);
+
+    if (startDateSpan && endDateSpan && durationSpan) {
+      startDateSpan.textContent = moment(c.startDate).format('MMMM DD, YYYY');
+      endDateSpan.textContent = moment(c.endDate).format('MMMM DD, YYYY');
+      durationSpan.textContent = c.duration;
+    }
+  };
+
+  // ========== BROADCAST DATE CHANGES TO CHILD WIDGETS ==========
+  c.broadcastDateChange = function() {
+    // Method 1: Using $rootScope broadcast (reaches all widgets)
+    $rootScope.$broadcast('dateRangeChanged', {
+      startDate: c.startDate,
+      endDate: c.endDate,
+      duration: c.duration,
+      label: c.dateRangeLabel
+    });
+
+    // Method 2: Store in window object for non-Angular widgets
+    if (window.dashboardDateRange) {
+      window.dashboardDateRange = {
+        startDate: c.startDate,
+        endDate: c.endDate,
+        duration: c.duration,
+        label: c.dateRangeLabel,
+        timestamp: new Date().getTime()
+      };
+    } else {
+      window.dashboardDateRange = {
+        startDate: c.startDate,
+        endDate: c.endDate,
+        duration: c.duration,
+        label: c.dateRangeLabel,
+        timestamp: new Date().getTime()
+      };
+    }
+
+    // Method 3: Trigger custom DOM event for Chart.js widgets
+    var event = new CustomEvent('dashboardDateChange', {
+      detail: {
+        startDate: c.startDate,
+        endDate: c.endDate,
+        duration: c.duration,
+        label: c.dateRangeLabel
+      }
+    });
+    document.dispatchEvent(event);
+
+    console.log('Date range broadcast:', c.startDate, 'to', c.endDate);
+  };
+
+  // ========== DASHBOARD NAVIGATION ==========
+  c.activePageUrl = $sce.trustAsResourceUrl('/pexminer?id=analytic_dashboard&sysparm_clear_stack=true&sysparm_nostack=true');
+
+  c.selectDashboard = function(key) {
+    c.selectedDashboard = key;
+    c.onDashboardChange();
+  };
+
+  c.onDashboardChange = function() {
+    switch (c.selectedDashboard) {
+      case 'analytics':
+        c.activeDashboardLabel = 'Dashboard';
+        c.activePageUrl = $sce.trustAsResourceUrl('/pexminer?id=analytic_dashboard&sysparm_clear_stack=true&sysparm_nostack=true');
+        break;
+      case 'quality':
+        c.activeDashboardLabel = 'Quality Insights';
+        c.activePageUrl = $sce.trustAsResourceUrl('/pexminer?id=quality_insight&sysparm_clear_stack=true&sysparm_nostack=true');
+        break;
+      case 'issues':
+        c.activeDashboardLabel = 'Issue Analytics';
+        c.activePageUrl = $sce.trustAsResourceUrl('/pexminer?id=issue_analytics&sysparm_clear_stack=true&sysparm_nostack=true');
+        break;
+    }
+  };
+
+  c.setTab = function(tab) {
+    c.activeTab = tab;
+  };
+
+  // ========== FILTERS ==========
+  c.channels = [
+    { label: 'All', value: 'all' },
+    { label: 'Voice', value: 'voice' },
+    { label: 'Chat', value: 'chat' }
+  ];
+  c.selectedChannel = c.channels[0];
+
+  c.searchTeams = '';
+  c.teams = [
+    { name: 'Virgin media', selected: true },
+    { name: 'East link', selected: false },
+    { name: 'Arlo voice support', selected: true }
+  ];
+
+  c.selectAllTeams = function() {
+    c.teams.forEach(function(t) { t.selected = true; });
+    c.onFiltersChanged();
+  };
+
+  c.clearAllTeams = function() {
+    c.teams.forEach(function(t) { t.selected = false; });
+    c.onFiltersChanged();
+  };
+
+  c.searchCategories = '';
+  c.categories = [
+    { name: 'Accessories', selected: false },
+    { name: 'App', selected: true },
+    { name: 'Firmware', selected: false },
+    { name: 'Live Streaming', selected: true }
+  ];
+
+  c.selectAllCategories = function() {
+    c.categories.forEach(function(cat) { cat.selected = true; });
+    c.onFiltersChanged();
+  };
+
+  c.clearAllCategories = function() {
+    c.categories.forEach(function(cat) { cat.selected = false; });
+    c.onFiltersChanged();
+  };
+
+  c.onFiltersChanged = function() {
+    c.broadcastDateChange(); // Re-broadcast with current filters
+    console.log('Filters changed');
+  };
+
+  c.downloadAs = function(format) {
+    if (format === 'xlsx') {
+      console.log("Downloading report as XLSX...");
+    }
+  };
+
+  // ========== INITIALIZATION ==========
+  c.$onInit = function() {
+    c.initializeDateRange();
+    
+    $timeout(function() {
+      c.initDateRangePicker();
+    }, 500);
+  };
+
+  // ========== CLEANUP ==========
+  c.$onDestroy = function() {
+    var dateBtn = $('#dateRangeBtn_' + c.widget.id);
+    if (dateBtn.data('daterangepicker')) {
+      dateBtn.data('daterangepicker').remove();
+    }
+  };
+};
+</script>
+
+<style>
+/* Existing styles from your file */
+.custom-dashboard-widget {
+  font-family: 'Arial', sans-serif;
+  padding: 15px;
+  background: #f9fbfd;
+  color: #111;
+}
+
+.welcome-text {
+  font-size: 20px;
+  font-weight: bold;
+  margin-bottom: 15px;
+}
+
+.container-xxl {
+  max-width: 1280px;
+}
+
+.filter-btn {
+  position: relative;
+  text-align: left;
+  padding-right: 2rem;
+}
+
+.filter-btn.dropdown-toggle::after {
+  position: absolute;
+  right: .75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 0;
+}
+
+/* Date info bar styling */
+.date-info-bar {
+  border-left: 4px solid #ff6600;
+}
+
+/* Date range button specific styling */
+#dateRangeBtn_{{widget.id}} {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+#dateRangeBtn_{{widget.id}}:hover {
+  background-color: #f8f9fa !important;
+  border-color: #ff6600 !important;
+}
+
+/* Bootstrap icon support */
+.bi-calendar3::before {
+  content: "📅";
+  margin-right: 5px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .filter-btn {
+    width: 100% !important;
+    margin-bottom: 0.5rem;
+  }
+}
+</style>
+I've integrated a comprehensive date picker solution into your Dashboard Header. Here's what I've added:
+Key Features:
+1. Date Range Picker Button
+
+Placed between "All Categories" and "Download" buttons
+Shows current date range label (e.g., "Last 7 days")
+Styled consistently with other filters
+
+2. Pre-configured Date Ranges
+
+Today, Yesterday
+Last 7/30 Days
+This/Last Month
+Last 3/6 Months
+Custom Range option
+
+3. Triple Communication Method
+The date picker broadcasts changes through three channels so ALL chart widgets can receive updates:
+Method 1: Angular $rootScope - For Angular-based widgets
+javascript$rootScope.$broadcast('dateRangeChanged', {...});
+Method 2: Window Object - For non-Angular widgets
+javascriptwindow.dashboardDateRange = {...};
+Method 3: Custom DOM Event - For Chart.js widgets
+javascriptdocument.dispatchEvent(new CustomEvent('dashboardDateChange', {...}));
+How Chart Widgets Should Listen:
+For Your Chart Widgets (Chart.js):
+Add this to each chart widget's controller:
+javascript// Listen for date changes
+document.addEventListener('dashboardDateChange', function(e) {
+  var dates = e.detail;
+  console.log('Received date change:', dates.startDate, 'to', dates.endDate);
+  
+  // Update your chart with new date range
+  c.updateChartData(dates.startDate, dates.endDate);
+});
+
+// Or check window object on init
+c.$onInit = function() {
+  if (window.dashboardDateRange) {
+    var dates = window.dashboardDateRange;
+    c.updateChartData(dates.startDate, dates.endDate);
+  }
+  c.init();
+};
+Date Info Display:
+
+Optional info bar showing selected period
+Updates automatically when dates change
+Shows duration in days
+
+Benefits:
+✅ Single source of truth for dates across all widgets
+✅ Three communication methods ensure all widgets receive updates
+✅ Pre-configured ranges for common use cases
+✅ Custom range for flexible date selection
+✅ Persistent state via window object
+✅ Clean UI integrated with existing filters
+Would you like me to show you how to update one of your chart widgets (like the grouped bar chart) to listen and respond to these date changes?
