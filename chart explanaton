@@ -1,0 +1,432 @@
+# APPROACH 1: CHANGES MADE TO LICENSE EXPIRATIONS WIDGET
+
+## Summary of Changes
+The widget was transformed from a **static layout** to a **responsive, self-aware component** that adapts to its container size.
+
+---
+
+## 🔴 CHANGE 1: Added Imports (Lines 1-4)
+
+### BEFORE:
+```typescript
+import React from "react";
+```
+
+### AFTER:
+```typescript
+import React, { useEffect, useRef, useState } from "react";
+```
+
+**Why?** 
+- `useRef`: To get reference to the container DOM element
+- `useState`: To track the container width
+- `useEffect`: To set up ResizeObserver for monitoring size changes
+
+---
+
+## 🔴 CHANGE 2: Added Container Tracking (Lines 72-85 in new version)
+
+### BEFORE:
+```typescript
+const LicenseExpirations: React.FC<InnerWidgetProps> = ({ isStatic = false, variation }) => {
+  return (
+    <div className="inner-widget">
+```
+
+### AFTER:
+```typescript
+const LicenseExpirations: React.FC<InnerWidgetProps> = ({ 
+  isStatic = false, 
+  variation 
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // Track container width for responsive behavior
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+
+    resizeObserver.observe(containerRef.current);
+    return () => resizeObserver.disconnect();
+  }, []);
+```
+
+**Why?**
+- **ResizeObserver**: Modern API that watches element size changes (better than window resize)
+- **containerWidth state**: Stores current width to trigger re-renders when size changes
+- **Cleanup**: `disconnect()` prevents memory leaks when component unmounts
+
+---
+
+## 🔴 CHANGE 3: Added Responsive Breakpoint Logic (Lines 87-97 in new version)
+
+### BEFORE:
+```typescript
+// No breakpoint logic - static sizes
+```
+
+### AFTER:
+```typescript
+// Responsive breakpoints based on widget width
+const isCompact = containerWidth < 400;
+const isMedium = containerWidth >= 400 && containerWidth < 600;
+const isLarge = containerWidth >= 600;
+
+// Determine layout based on width and variation
+const shouldStackVertically = 
+  isCompact || 
+  (variation && isMedium) || 
+  (variation === InnerWidgetVariations.BAR_CHART) ||
+  (variation === InnerWidgetVariations.LINE_CHART);
+
+const showDivider = !shouldStackVertically && !variation;
+```
+
+**Why?**
+- **isCompact**: < 400px = Mobile/small widget
+- **isMedium**: 400-600px = Tablet/medium widget  
+- **isLarge**: > 600px = Desktop/large widget
+- **shouldStackVertically**: Determines if layout should be column (small) vs row (large)
+- **showDivider**: Only show vertical divider in side-by-side layout
+
+---
+
+## 🔴 CHANGE 4: Refactored Summary Section (Lines 99-155 in new version)
+
+### BEFORE:
+```typescript
+<div style={{
+  flex: "1 1 30%",
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center"
+}}>
+  <Flex align="center" gap={4} style={{ marginBottom: "8px", width: "280px" }}>
+    <Text style={{ fontSize: "32px", lineHeight: "40px" }}>
+      8
+    </Text>
+  </Flex>
+  <Text style={{ fontSize: "12px", lineHeight: "18px" }}>
+    Architectures in total
+  </Text>
+  <TimelineProgressBars data={MOCK_TIMELINE_DATA} isStatic={isStatic} />
+</div>
+```
+
+### AFTER:
+```typescript
+const renderSummarySection = () => (
+  <div 
+    className="license-exp-summary"
+    style={{
+      flex: shouldStackVertically ? "0 0 auto" : "1 1 30%",
+      minWidth: 0,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: shouldStackVertically ? "flex-start" : "center",
+      padding: shouldStackVertically ? "0 0 16px 0" : "0",
+      width: shouldStackVertically ? "100%" : "auto"
+    }}
+  >
+    <Flex 
+      direction={isCompact ? "row" : "row"}
+      align="center" 
+      gap={4} 
+      style={{ 
+        marginBottom: "4px",
+        width: "100%",
+        justifyContent: shouldStackVertically ? "flex-start" : "center"
+      }}
+    >
+      <Text
+        size="heading-02"
+        weight="semibold"
+        style={{
+          fontFamily: "Inter",
+          fontSize: isCompact ? "24px" : isMedium ? "28px" : "32px",
+          lineHeight: isCompact ? "32px" : isMedium ? "36px" : "40px",
+          fontWeight: 600
+        }}
+      >
+        8
+      </Text>
+      {isCompact && (
+        <Text style={{ fontSize: "11px" }}>
+          Architectures
+        </Text>
+      )}
+    </Flex>
+    
+    {!isCompact && (
+      <Text style={{
+        fontSize: isMedium ? "11px" : "12px",
+        marginBottom: shouldStackVertically ? "8px" : "4px",
+        textAlign: shouldStackVertically ? "left" : "center"
+      }}>
+        Architectures in total
+      </Text>
+    )}
+
+    <div style={{ width: "100%", marginTop: isCompact ? "8px" : "12px" }}>
+      <TimelineProgressBars
+        data={MOCK_TIMELINE_DATA}
+        isStatic={isStatic}
+        isCompact={isCompact}
+      />
+    </div>
+  </div>
+);
+```
+
+**Key Changes:**
+1. **Flex values**: Changes from fixed `1 1 30%` to responsive `0 0 auto` for stacked layout
+2. **Alignment**: `flex-start` for stacked (left-align), `center` for side-by-side
+3. **Font sizes**: Scale down from 32px → 28px → 24px based on width
+4. **Compact text**: Shows inline "Architectures" label instead of full text on mobile
+5. **Conditional rendering**: Hides full text on compact view
+6. **Dynamic spacing**: Adjusts margins/padding based on layout
+
+---
+
+## 🔴 CHANGE 5: Refactored Chart Section (Lines 157-172 in new version)
+
+### BEFORE:
+```typescript
+<div style={{ flex: "2 1 70%", minWidth: 0 }}>
+  <GroupedBarChart
+    data={MOCK_BAR_DATA}
+    isStatic={isStatic}
+    indexBy="architecture"
+    keys={["1-month", "3-months", "6-months", "12-months", "18-months"]}
+    colors={[...]}
+  />
+</div>
+```
+
+### AFTER:
+```typescript
+const renderChartSection = () => (
+  <div 
+    className="license-exp-chart"
+    style={{ 
+      flex: shouldStackVertically ? "1 1 auto" : "2 1 70%", 
+      minWidth: 0,
+      minHeight: isCompact ? "180px" : shouldStackVertically ? "200px" : "250px",
+      width: "100%"
+    }}
+  >
+    <GroupedBarChart
+      data={MOCK_BAR_DATA}
+      isStatic={isStatic}
+      indexBy="architecture"
+      keys={["1-month", "3-months", "6-months", "12-months", "18-months"]}
+      colors={[...]}
+      containerWidth={containerWidth}
+      isCompact={isCompact}
+      isMedium={isMedium}
+    />
+  </div>
+);
+```
+
+**Key Changes:**
+1. **Flex values**: Changes to `1 1 auto` for stacked layout (takes remaining space)
+2. **Min-height**: Sets minimum chart heights: 180px (compact) → 200px (stacked) → 250px (full)
+3. **New props passed to chart**: 
+   - `containerWidth`: So chart knows exact space available
+   - `isCompact`: Chart can adjust internally
+   - `isMedium`: Chart can adjust internally
+
+---
+
+## 🔴 CHANGE 6: Updated Container with Ref and Dynamic Layout (Lines 174-195 in new version)
+
+### BEFORE:
+```typescript
+return (
+  <div className="inner-widget">
+    {/* Hardcoded layout based only on variation prop */}
+  </div>
+);
+```
+
+### AFTER:
+```typescript
+return (
+  <div 
+    ref={containerRef}
+    className="inner-widget license-expirations-widget" 
+    style={{ 
+      display: "flex",
+      flexDirection: shouldStackVertically ? "column" : "row",
+      gap: shouldStackVertically ? "12px" : "16px",
+      height: "100%",
+      width: "100%",
+      alignItems: shouldStackVertically ? "stretch" : "center"
+    }}
+  >
+    {/* Show only summary for BAR variation */}
+    {variation === InnerWidgetVariations.BAR_CHART && renderSummarySection()}
+    
+    {/* Show only chart for LINE variation */}
+    {variation === InnerWidgetVariations.LINE_CHART && renderChartSection()}
+    
+    {/* Show both for FULL (no variation) */}
+    {!variation && (
+      <>
+        {renderSummarySection()}
+        {showDivider && <Divider direction="vertical" />}
+        {renderChartSection()}
+      </>
+    )}
+  </div>
+);
+```
+
+**Key Changes:**
+1. **Added ref={containerRef}**: Attaches ResizeObserver to track size
+2. **Dynamic flexDirection**: `column` for small screens, `row` for large
+3. **Dynamic gap**: Smaller gap (12px) when stacked, larger (16px) side-by-side
+4. **Dynamic alignItems**: `stretch` for stacked, `center` for side-by-side
+5. **Conditional divider**: Only shows when `showDivider` is true
+
+---
+
+## 📊 VISUAL BEHAVIOR COMPARISON
+
+### BEFORE (Static):
+```
+┌────────────────────────────────────────────────┐
+│ [8 Architectures] │ [        Chart        ] │
+│ [Timeline Bars]   │ [        Chart        ] │
+│ (Fixed 30%)       │ (Fixed 70%)             │
+└────────────────────────────────────────────────┘
+Same layout at ALL screen sizes ❌
+```
+
+### AFTER (Responsive):
+
+**Large (>600px):**
+```
+┌────────────────────────────────────────────────┐
+│ [8 Architectures] │ [        Chart        ] │
+│ [Timeline Bars]   │ [        Chart        ] │
+│ (30%)             │ (70%)                   │
+└────────────────────────────────────────────────┘
+```
+
+**Medium (400-600px):**
+```
+┌─────────────────────────────┐
+│ 8 Architectures             │
+│ Timeline Bars               │
+├─────────────────────────────┤
+│                             │
+│ Chart (smaller text/bars)   │
+│                             │
+└─────────────────────────────┘
+```
+
+**Compact (<400px):**
+```
+┌──────────────────┐
+│ 8 Architectures  │
+│ Compact Bars     │
+├──────────────────┤
+│                  │
+│ Compact Chart    │
+│                  │
+└──────────────────┘
+```
+
+---
+
+## 💡 KEY CONCEPTS USED
+
+1. **ResizeObserver API**: Modern browser API that watches element size changes
+   - Better than `window.resize` because it tracks the specific element
+   - Fires when parent grid resizes the widget
+
+2. **Container Query Pattern**: Widget responds to its own size, not viewport
+   - Widget in a 300px grid cell behaves differently than same widget in 800px cell
+   - True component-level responsiveness
+
+3. **Conditional Rendering**: Different layouts for different sizes
+   - Stacked (column) layout for narrow widgets
+   - Side-by-side (row) layout for wide widgets
+
+4. **Cascading Breakpoints**: 
+   - Component-level breakpoints (this widget: 400px, 600px)
+   - Can be different from global breakpoints (viewport: 768px, 1024px)
+
+5. **Props Drilling for Charts**: Passing size info down to child charts
+   - Charts can't use their own ResizeObserver (causes layout thrashing)
+   - Parent measures once, passes down to all children
+
+---
+
+## 🚀 HOW TO USE THIS PATTERN IN OTHER WIDGETS
+
+```typescript
+// 1. Add imports
+import { useEffect, useRef, useState } from "react";
+
+// 2. Add container tracking
+const MyWidget = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      setContainerWidth(entries[0].contentRect.width);
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // 3. Define breakpoints
+  const isCompact = containerWidth < 400;
+  const isMedium = containerWidth >= 400 && containerWidth < 600;
+
+  // 4. Attach ref to container
+  return (
+    <div ref={containerRef}>
+      {isCompact ? <CompactView /> : <FullView />}
+    </div>
+  );
+};
+```
+
+---
+
+## ✅ BENEFITS OF THIS APPROACH
+
+1. **Self-contained**: Widget doesn't need parent to tell it what size it is
+2. **Reusable**: Can drop widget anywhere and it adapts automatically
+3. **Performance**: Only tracks its own container, not whole window
+4. **Flexible**: Different widgets can have different breakpoints
+5. **No CSS Media Queries**: True container-based logic, not viewport-based
+6. **Grid-friendly**: Works perfectly with react-grid-layout's dynamic sizing
+
+---
+
+## 📝 NOTES
+
+- The ResizeObserver will fire when:
+  - Widget is first rendered
+  - Grid is resized
+  - User drags to resize (if resizable enabled)
+  - Screen orientation changes
+  - Browser window resizes
+
+- This pattern works with ANY grid layout system, not just react-grid-layout
+
+- You can customize breakpoints per widget based on content needs
