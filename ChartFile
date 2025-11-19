@@ -1,0 +1,250 @@
+import { Divider } from "@magnetic/divider";
+import { Flex } from "@magnetic/flex";
+import { Text } from "@magnetic/text";
+import React, { useEffect, useRef, useState } from "react";
+import { InnerWidgetProps, InnerWidgetVariations } from "../../utils/overview-grid-util";
+import { CHART_COLORS } from "../../utils/chart-colors";
+import GroupedBarChart from "../charts/GroupedBarChart";
+import TimelineProgressBars from "../charts/TimelineProgressBars";
+import "./widgets.scss";
+
+// Mock data for timeline visualization
+const MOCK_TIMELINE_DATA = [
+  { label: "Within 1 month", count: 51, color: CHART_COLORS.licenseExpirations.oneMonth },
+  { label: "Within 3 months", count: 41, color: CHART_COLORS.licenseExpirations.threeMonths },
+  { label: "Within 6 months", count: 18, color: CHART_COLORS.licenseExpirations.sixMonths },
+  { label: "Within 12 months", count: 18, color: CHART_COLORS.licenseExpirations.twelveMonths },
+  { label: "Within 18 months", count: 128, color: CHART_COLORS.licenseExpirations.eighteenMonths }
+];
+
+// Mock data for grouped bar chart
+const MOCK_BAR_DATA = [
+  {
+    architecture: "Enterprise Switching",
+    "1-month": 900,
+    "3-months": 500,
+    "6-months": 200,
+    "12-months": 300,
+    "18-months": 200
+  },
+  {
+    architecture: "Collaboration",
+    "1-month": 700,
+    "3-months": 400,
+    "6-months": 350,
+    "12-months": 200,
+    "18-months": 150
+  },
+  {
+    architecture: "Security",
+    "1-month": 1500,
+    "3-months": 600,
+    "6-months": 450,
+    "12-months": 250,
+    "18-months": 300
+  },
+  {
+    architecture: "Enterprise Routing",
+    "1-month": 500,
+    "3-months": 400,
+    "6-months": 350,
+    "12-months": 200,
+    "18-months": 150
+  },
+  {
+    architecture: "Wireless",
+    "1-month": 800,
+    "3-months": 500,
+    "6-months": 300,
+    "12-months": 400,
+    "18-months": 200
+  },
+  {
+    architecture: "Network Assurance",
+    "1-month": 1000,
+    "3-months": 600,
+    "6-months": 400,
+    "12-months": 500,
+    "18-months": 300
+  }
+];
+
+const LicenseExpirations: React.FC<InnerWidgetProps> = ({ 
+  isStatic = false, 
+  variation 
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // Track container width for responsive behavior
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+
+    resizeObserver.observe(containerRef.current);
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  // Responsive breakpoints based on widget width
+  const isCompact = containerWidth < 400;
+  const isMedium = containerWidth >= 400 && containerWidth < 600;
+  const isLarge = containerWidth >= 600;
+
+  // Determine layout based on width and variation
+  const shouldStackVertically = 
+    isCompact || 
+    (variation && isMedium) || 
+    (variation === InnerWidgetVariations.BAR_CHART) ||
+    (variation === InnerWidgetVariations.LINE_CHART);
+
+  const showDivider = !shouldStackVertically && !variation;
+
+  const renderSummarySection = () => (
+    <div 
+      className="license-exp-summary"
+      style={{
+        flex: shouldStackVertically ? "0 0 auto" : "1 1 30%",
+        minWidth: 0,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: shouldStackVertically ? "flex-start" : "center",
+        padding: shouldStackVertically ? "0 0 16px 0" : "0",
+        width: shouldStackVertically ? "100%" : "auto"
+      }}
+    >
+      {/* Header */}
+      <Flex 
+        direction={isCompact ? "row" : "row"}
+        align="center" 
+        gap={4} 
+        style={{ 
+          marginBottom: "4px",
+          width: "100%",
+          justifyContent: shouldStackVertically ? "flex-start" : "center"
+        }}
+      >
+        <Text
+          size="heading-02"
+          weight="semibold"
+          style={{
+            fontFamily: "Inter",
+            fontSize: isCompact ? "24px" : isMedium ? "28px" : "32px",
+            lineHeight: isCompact ? "32px" : isMedium ? "36px" : "40px",
+            fontWeight: 600
+          }}
+        >
+          8
+        </Text>
+        {isCompact && (
+          <Text
+            size="body-short-01"
+            color="var(--text-secondary)"
+            style={{
+              fontFamily: "Inter",
+              fontSize: "11px",
+              lineHeight: "16px",
+              fontWeight: 400
+            }}
+          >
+            Architectures
+          </Text>
+        )}
+      </Flex>
+      
+      {!isCompact && (
+        <Text
+          size="body-short-01"
+          color="var(--text-secondary)"
+          style={{
+            fontFamily: "Inter",
+            fontSize: isMedium ? "11px" : "12px",
+            lineHeight: isMedium ? "16px" : "18px",
+            fontWeight: 400,
+            marginBottom: shouldStackVertically ? "8px" : "4px",
+            textAlign: shouldStackVertically ? "left" : "center"
+          }}
+        >
+          Architectures in total
+        </Text>
+      )}
+
+      {/* Timeline bars */}
+      <div style={{ 
+        width: "100%", 
+        marginTop: isCompact ? "8px" : "12px" 
+      }}>
+        <TimelineProgressBars
+          data={MOCK_TIMELINE_DATA}
+          isStatic={isStatic}
+          isCompact={isCompact}
+        />
+      </div>
+    </div>
+  );
+
+  const renderChartSection = () => (
+    <div 
+      className="license-exp-chart"
+      style={{ 
+        flex: shouldStackVertically ? "1 1 auto" : "2 1 70%", 
+        minWidth: 0,
+        minHeight: isCompact ? "180px" : shouldStackVertically ? "200px" : "250px",
+        width: "100%"
+      }}
+    >
+      <GroupedBarChart
+        data={MOCK_BAR_DATA}
+        isStatic={isStatic}
+        indexBy="architecture"
+        keys={["1-month", "3-months", "6-months", "12-months", "18-months"]}
+        colors={[
+          CHART_COLORS.licenseExpirations.oneMonth,
+          CHART_COLORS.licenseExpirations.threeMonths,
+          CHART_COLORS.licenseExpirations.sixMonths,
+          CHART_COLORS.licenseExpirations.twelveMonths,
+          CHART_COLORS.licenseExpirations.eighteenMonths
+        ]}
+        containerWidth={containerWidth}
+        isCompact={isCompact}
+        isMedium={isMedium}
+      />
+    </div>
+  );
+
+  return (
+    <div 
+      ref={containerRef}
+      className="inner-widget license-expirations-widget" 
+      style={{ 
+        display: "flex",
+        flexDirection: shouldStackVertically ? "column" : "row",
+        gap: shouldStackVertically ? "12px" : "16px",
+        height: "100%",
+        width: "100%",
+        alignItems: shouldStackVertically ? "stretch" : "center"
+      }}
+    >
+      {/* Show only summary for BAR variation */}
+      {variation === InnerWidgetVariations.BAR_CHART && renderSummarySection()}
+      
+      {/* Show only chart for LINE variation */}
+      {variation === InnerWidgetVariations.LINE_CHART && renderChartSection()}
+      
+      {/* Show both for FULL (no variation) */}
+      {!variation && (
+        <>
+          {renderSummarySection()}
+          {showDivider && <Divider direction="vertical" />}
+          {renderChartSection()}
+        </>
+      )}
+    </div>
+  );
+};
+
+export default React.memo(LicenseExpirations);
