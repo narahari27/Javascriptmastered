@@ -1,0 +1,128 @@
+import { Flex } from "@magnetic/flex";
+import { Text } from "@magnetic/text";
+import { Link } from "@magnetic/link";
+import { ArrowSquareOut } from "@magnetic/icons";
+import { Table, useMagneticTable } from "@magnetic/table";
+import React, { useEffect, useMemo } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { t } from "i18next";
+import { CallState } from "../../../../../core/model/core.model";
+import { InnerWidgetProps } from "../../utils/overview-grid.model";
+import { overviewsummarypageActions } from "../../../data-access/overview.reducer";
+import { 
+  selectTrueForwardCallState, 
+  selectTrueForwardData 
+} from "../../../data-access/overview.selector";
+import LoadingWidget from "../states/loading-widget";
+import FailedWidget from "../states/failed-widget";
+import NoWidgetData from "../states/no-widget-data";
+import "./widgets.scss";
+
+interface TrueForwardItem {
+  suiteName: string;
+  nextTrueForwardDate: string;
+  daysRemaining: number;
+}
+
+const MOCK_DATA: TrueForwardItem[] = [
+  { suiteName: "Meraki - Wireless", nextTrueForwardDate: "Jun 08, 2025", daysRemaining: 189 },
+  { suiteName: "Cisco DNA Switching", nextTrueForwardDate: "Aug 23, 2025", daysRemaining: 265 },
+  { suiteName: "Cisco Services Portfolio: DNA SD-MAN FedRAMP", nextTrueForwardDate: "Aug 23, 2025", daysRemaining: 265 }
+];
+
+const TrueForward: React.FC<InnerWidgetProps> = ({ isStatic = false, isEditing, selectedView }) => {
+  const dispatch = useDispatch();
+  const trueForwardData = useSelector(selectTrueForwardData);
+  const callState = useSelector(selectTrueForwardCallState);
+
+  // Fetch data on mount (skip if static widget)
+  useEffect(() => {
+    if (isStatic) return;
+    dispatch(overviewsummarypageActions.loadTrueForwardData());
+  }, [isStatic, dispatch]);
+
+  // Use mock data for static view, real data otherwise
+  const data = isStatic ? MOCK_DATA : trueForwardData;
+  const hasData = data && data.length > 0;
+
+  const columns = useMemo(() => [
+    {
+      header: "Suite name",
+      accessorKey: "suiteName",
+      cell: ({ getValue }: any) => (
+        <Link href={`/suite/${getValue()}`}>
+          <Text size={isStatic ? "p5" : "p4"} style={{ color: "#2563EB" }}>
+            {getValue()}
+          </Text>
+        </Link>
+      )
+    },
+    {
+      header: "Next True Forward date",
+      accessorKey: "nextTrueForwardDate",
+      cell: ({ row }: any) => (
+        <Text size={isStatic ? "p5" : "p4"} style={{ color: "#374151" }}>
+          {row.original.nextTrueForwardDate} (in {row.original.daysRemaining} days)
+        </Text>
+      )
+    }
+  ], [isStatic]);
+
+  const { table } = useMagneticTable({
+    columns,
+    data: data || []
+  });
+
+  // Empty state component
+  const EmptyState = () => (
+    <Flex direction="vertical" align="center" justify="center" gap={16} style={{ padding: "40px" }}>
+      <div
+        style={{
+          width: "48px",
+          height: "48px",
+          borderRadius: "8px",
+          backgroundColor: "#7C3AED",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }}
+      >
+        <Text size="h3" style={{ color: "white" }}>i</Text>
+      </div>
+      <Text size="p3" weight="semibold">No upcoming True Forward events</Text>
+      <Text size="p4" color="light" style={{ textAlign: "center", maxWidth: "400px" }}>
+        Click below to explore our flexible buying programs to optimize your licenses
+      </Text>
+      <Link href="/buying-program" icon={<ArrowSquareOut />}>
+        Learn more
+      </Link>
+    </Flex>
+  );
+
+  return (
+    <div className="inner-widget">
+      {!isStatic && (callState === CallState.Loading || callState === CallState.InitialState) ? (
+        <LoadingWidget right={true} />
+      ) : !isStatic && callState === CallState.Error ? (
+        <FailedWidget
+          title={t("overview.widgets.trueForward.failedToLoadTitle")}
+          onRetry={() => dispatch(overviewsummarypageActions.loadTrueForwardData())}
+        />
+      ) : !hasData ? (
+        <EmptyState />
+      ) : (
+        <div
+          style={{
+            width: "100%",
+            overflowX: "auto",
+            fontSize: isStatic ? "11px" : "14px"
+          }}
+        >
+          <Table table={table} />
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default React.memo(TrueForward);
